@@ -1,0 +1,22 @@
+training:
+  learning_rate: 0.0001
+  weight_decay: 0.0001
+
+trainer:
+  max_epochs: 1000
+  precision: 16-mixed
+  check_val_every_n_epoch: 50
+
+model:
+  encoder_name: mit_b2
+  arch: unet
+  encoder_weights: imagenet
+
+
+data:
+  shape: 1024
+  batch_size: 16
+  root_img: /home/clement/Documents/data/Yosra/LabelMed/input/
+  root_svg: /home/clement/Documents/data/Yosra/Segmentation/output/DNAFiberQuantification/annotations/
+  revision_file: /home/clement/Documents/data/Yosra/Segmentation/output/DNAFiberQuantification/.revisions.json
+  crop_size: [512, 512]

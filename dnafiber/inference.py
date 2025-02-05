@@ -5,10 +5,14 @@ from czifile import CziFile
 import torch
 from torchvision.transforms._functional_tensor import normalize
 from dnafiber.post_process import PostProcessor
+from tifffile import imread
 
 
 def load_image(path):
-    data: np.ndarray = CziFile(path).asarray()
+    if path.endswith(".czi"):
+        data: np.ndarray = CziFile(path).asarray()
+    if path.endswith(".tiff"):
+        data = imread(path)
     data = data.squeeze()
 
     r = data[1]

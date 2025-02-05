@@ -44,9 +44,9 @@ class PostProcessor:
 
     def filter_cc_if_contains_only_value(self):
         labels = np.unique(self.cc, return_counts=False)
-        for l in labels:
-            if len(np.unique(self.mask[self.cc == l])) != 1:
-                self.mask[self.cc == l] = 0
+        for label in labels:
+            if len(np.unique(self.mask[self.cc == label])) != 2:
+                self.mask[self.cc == label] = 0
 
         self._cc = None
         self.ncc = None
@@ -68,6 +68,7 @@ class PostProcessor:
         self.ncc = None
 
     def apply(self):
+        self.filter_by_size(min_size=15)
         self.filter_cc_if_contains_only_value()
 
         skeleton = skeletonize(self.mask > 0)

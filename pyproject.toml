@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "dnafiber"
-version = "0.1.95"
+version = "0.1.950"
 description = ""
 authors = ["ClementPla <clement.playout@polymtl.ca>"]
 readme = "README.md"

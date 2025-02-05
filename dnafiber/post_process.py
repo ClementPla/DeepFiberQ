@@ -68,7 +68,6 @@ class PostProcessor:
         self.ncc = None
 
     def apply(self):
-        self.filter_by_size(min_size=25)
         self.filter_cc_if_contains_only_value()
 
         skeleton = skeletonize(self.mask > 0)

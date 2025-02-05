@@ -77,7 +77,8 @@ class PostProcessor:
         self._cc = None
         self.ncc = None
         self.filter_alternating_cc()
-
+        self._cc = None
+        self.ncc = None
         return self.mask
 
     def count_ratio(self):

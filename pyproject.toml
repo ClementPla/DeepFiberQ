@@ -10,6 +10,7 @@ python = "^3.10"
 lightning= "^2.5.0.post0"
 monai= "^1.4.0"
 segmentation_models_pytorch="^0.3.4"
+huggingface_hub="^0.25.2"
 
 
 [build-system]

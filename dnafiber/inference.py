@@ -10,10 +10,14 @@ from pathlib import Path
 
 
 def load_image(path: Path):
-    if path.suffixes == [".czi"]:
+    path = str(path)
+    if path.endswith(".czi"):
         data: np.ndarray = CziFile(path).asarray()
-    if path.suffixes == [".tif"] or path.suffixes == [".tiff"]:
+    elif path.endswith(".tif") or path.endswith(".tiff"):
         data = imread(path)
+    else:
+        raise ValueError("Invalid file format")
+
     data = data.squeeze()
 
     r = data[1]

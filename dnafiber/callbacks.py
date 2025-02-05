@@ -1,7 +1,7 @@
-
 from lightning.pytorch.callbacks import Callback
 from pytorch_lightning.utilities import rank_zero_only
 import wandb
+
 
 class LogPredictionSamplesCallback(Callback):
     def __init__(self, wandb_logger, n_images=8):
@@ -11,10 +11,7 @@ class LogPredictionSamplesCallback(Callback):
 
     @rank_zero_only
     def on_validation_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
-        if (
-            batch_idx < 1
-            and trainer.is_global_zero
-        ):
+        if batch_idx < 1 and trainer.is_global_zero:
             n = self.n_images
             x = batch["image"][:n].float()
             h, w = x.shape[-2:]

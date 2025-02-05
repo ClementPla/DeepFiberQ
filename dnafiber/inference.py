@@ -7,6 +7,8 @@ from torchvision.transforms._functional_tensor import normalize
 from dnafiber.post_process import PostProcessor
 from tifffile import imread
 from pathlib import Path
+import pandas as pd
+from skimage.segmentation import expand_labels
 
 
 def load_image(path: Path):
@@ -17,16 +19,11 @@ def load_image(path: Path):
         data = imread(path)
     else:
         raise ValueError("Invalid file format")
-
     data = data.squeeze()
-
     r = data[1]
-
     g = data[0]
-
     r = np.clip(r, 0, 1320)
     g = np.clip(g, 0, 4288)
-
     g = g / g.max()
     r = r / r.max()
     img = np.stack([r, g, np.zeros_like(r)], axis=-1).astype(np.float32)
@@ -40,7 +37,7 @@ def preprocess_image(image):
 
 
 @torch.inference_mode()
-def inference(model, path, use_cuda=False):
+def run(model, path, use_cuda=False):
     image = load_image(path)
     image = preprocess_image(image)
     if use_cuda:
@@ -60,3 +57,27 @@ def inference(model, path, use_cuda=False):
     counts = pp.count_ratio()
 
     return mask, counts
+
+
+def convert_to_dataset(counts):
+    data = {"index": [], "red": [], "green": []}
+    for k, v in counts.items():
+        data["index"].append(k)
+        data["green"].append(v["green"])
+        data["red"].append(v["red"])
+    df = pd.DataFrame(data)
+    return df
+
+
+def convert_mask_to_image(mask, expand=False):
+    if expand:
+        mask = expand_labels(mask, distance=expand)
+    h, w = mask.shape
+    image = np.zeros((h, w, 3))
+    GREEN = np.array([0, 255, 0])
+    RED = np.array([255, 0, 0])
+
+    image[mask == 1] = RED
+    image[mask == 2] = GREEN
+
+    return image

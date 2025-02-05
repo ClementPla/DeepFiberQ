@@ -15,6 +15,9 @@ class UnetMIT_B0(PyTorchModelHubMixin, torch.nn.Module):
                 classes=3,
             )
 
+    def forward(self, x):
+        return self.model(x)
+
 
 def get_model():
     return UnetMIT_B0.from_pretrained("ClementP/DeepFiberQ")

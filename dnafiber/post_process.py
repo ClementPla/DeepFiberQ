@@ -45,11 +45,11 @@ class PostProcessor:
     def filter_cc_if_contains_only_value(self):
         labels = np.unique(self.cc, return_counts=False)
         for l in labels:
-            if np.unique(self.mask[self.cc == l]).size == 1:
+            if len(np.unique(self.mask[self.cc == l])) != 1:
                 self.mask[self.cc == l] = 0
-                self.cc[self.cc == l] = 0
-                self._cc = relabel_sequential(self.cc)[0]
-                self.ncc -= 1
+
+        self._cc = None
+        self.ncc = None
 
     def filter_alternating_cc(self):
         labels = np.unique(self.cc, return_counts=False)

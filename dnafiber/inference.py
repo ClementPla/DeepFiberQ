@@ -65,6 +65,7 @@ def convert_to_dataset(counts):
         data["index"].append(k)
         data["green"].append(v["green"])
         data["red"].append(v["red"])
+        data["green_ratio"] = v["green"] / (v["red"])
     df = pd.DataFrame(data)
     return df
 

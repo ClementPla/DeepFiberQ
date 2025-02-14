@@ -60,12 +60,15 @@ def run(model, path, use_cuda=False):
 
 
 def convert_to_dataset(counts):
-    data = {"index": [], "red": [], "green": []}
+    data = {"index": [], "red": [], "green": [], "ratio": []}
     for k, v in counts.items():
         data["index"].append(k)
         data["green"].append(v["green"])
         data["red"].append(v["red"])
-        data["green_ratio"] = v["green"] / (v["red"])
+        if v["red"] == 0:
+            data["ratio"].append(np.nan)
+        else:
+            data["ratio"].append(v["green"] / (v["red"]))
     df = pd.DataFrame(data)
     return df
 
@@ -74,7 +77,7 @@ def convert_mask_to_image(mask, expand=False):
     if expand:
         mask = expand_labels(mask, distance=expand)
     h, w = mask.shape
-    image = np.zeros((h, w, 3))
+    image = np.zeros((h, w, 3), dtype=np.uint8)
     GREEN = np.array([0, 255, 0])
     RED = np.array([255, 0, 0])
 

@@ -1,7 +1,7 @@
 from skimage.measure import label
 
 from skimage.morphology import skeletonize
-from skimage.segmentation import relabel_sequential
+from skimage.segmentation import relabel_sequential, expand_labels
 import numpy as np
 
 
@@ -59,8 +59,7 @@ class PostProcessor:
             values = self.mask[self.cc == l]
             if values.size < 3:
                 continue
-            diff = np.diff(values, n=1) > 0
-
+            diff = np.abs(np.diff(values, n=1)) > 0
             if sum(diff) > 1:
                 self.mask[self.cc == l] = 0
 
@@ -68,6 +67,7 @@ class PostProcessor:
         self.ncc = None
 
     def apply(self):
+        self.mask = expand_labels(self.mask, distance=5)
         self.filter_by_size(min_size=15)
         self.filter_cc_if_contains_only_value()
 

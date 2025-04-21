@@ -37,7 +37,7 @@ def preprocess_image(image):
 
 
 @torch.inference_mode()
-def run(model, path, use_cuda=False):
+def run(model, path, use_cuda=False, post_process=True):
     image = load_image(path)
     image = preprocess_image(image)
     if use_cuda:
@@ -52,6 +52,8 @@ def run(model, path, use_cuda=False):
     )
     pred = F.interpolate(pred, size=image.shape[-2:], mode="nearest")
     pred = pred.argmax(1).cpu().numpy().squeeze()
+    if not post_process:
+        return pred
     pp = PostProcessor(pred)
     mask = pp.apply()
     counts = pp.count_ratio()

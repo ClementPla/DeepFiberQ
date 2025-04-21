@@ -18,12 +18,11 @@ torch.set_float32_matmul_precision("medium")
 
 def train():
     c = Config("configs/config.yaml")
-    
-    datamodule = FiberDatamodule(**c["data"])
-    
 
-    trainee = Trainee(c['training'], **c['model'])
-    logger = WandbLogger(project="DeepFiberQ")
+    datamodule = FiberDatamodule(**c["data"])
+
+    trainee = Trainee(c["training"], **c["model"])
+    logger = WandbLogger(project="DeepFiberQ++")
     try:
         run_name = logger.experiment.name
         path = Path("checkpoints") / run_name
@@ -44,7 +43,7 @@ def train():
         ],
         logger=logger,
     )
-    
+
     datamodule.setup()
 
     train_dataloader = datamodule.train_dataloader()

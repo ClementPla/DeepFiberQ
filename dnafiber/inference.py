@@ -1,5 +1,5 @@
 import torch.nn.functional as F
-from monai.inferers import sliding_window_inference
+from monai.inferers.utils import sliding_window_inference
 import numpy as np
 from czifile import CziFile
 import torch
@@ -11,7 +11,7 @@ import pandas as pd
 from skimage.segmentation import expand_labels
 
 
-def load_image(path: Path):
+def load_image(path: Path | str):
     path = str(path)
     if path.endswith(".czi"):
         data: np.ndarray = CziFile(path).asarray()

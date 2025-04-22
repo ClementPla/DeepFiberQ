@@ -5,18 +5,16 @@ training:
 trainer:
   max_epochs: 1000
   precision: 16-mixed
-  check_val_every_n_epoch: 50
+  check_val_every_n_epoch: 100
+  strategy: ddp_find_unused_parameters_true
 
 model:
   encoder_name: mit_b2
   arch: unet
-  encoder_weights: imagenet
 
 
 data:
   shape: 1024
   batch_size: 16
-  root_img: /home/clement/Documents/data/Yosra/LabelMed/input/
-  root_svg: /home/clement/Documents/data/Yosra/Segmentation/output/DNAFiberQuantification/annotations/
-  revision_file: /home/clement/Documents/data/Yosra/Segmentation/output/DNAFiberQuantification/.revisions.json
+  root_img: /home/clement/Documents/data/DNAFiber/train/
   crop_size: [512, 512]

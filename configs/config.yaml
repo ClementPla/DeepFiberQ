@@ -6,7 +6,6 @@ trainer:
   max_epochs: 1000
   precision: 16-mixed
   check_val_every_n_epoch: 100
-  strategy: ddp_find_unused_parameters_true
 
 model:
   encoder_name: mit_b2

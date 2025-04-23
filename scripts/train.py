@@ -11,9 +11,17 @@ from dnafiber.callbacks import LogPredictionSamplesCallback
 import torch
 import argparse
 from lightning import seed_everything
+from dotenv import load_dotenv
+import os
+from huggingface_hub import HfApi
+from lightning.pytorch.utilities import rank_zero_only
 
 seed_everything(1234, workers=True)
 torch.set_float32_matmul_precision("medium")
+
+load_dotenv()
+
+HF_TOKEN = os.environ.get("HF_TOKEN")
 
 
 def train(arch, encoder):
@@ -22,11 +30,13 @@ def train(arch, encoder):
     c["model"]["encoder_name"] = encoder
     if "vit" in encoder:
         c["model"]["dynamic_img_size"] = True
+    if "mit" in encoder:
+        c["trainer"]["strategy"] = "ddp_find_unused_parameters_true"
 
     datamodule = FiberDatamodule(**c["data"])
 
-    trainee = Trainee(c["training"], **c["model"])
-    logger = WandbLogger(project="DeepFiberQ++", config=c.tracked_params)
+    trainee = Trainee(**c["training"], **c["model"])
+    logger = WandbLogger(project="DeepFiberQ++ V2", config=c.tracked_params)
     try:
         run_name = logger.experiment.name
         path = Path("checkpoints") / run_name
@@ -39,7 +49,7 @@ def train(arch, encoder):
             LogPredictionSamplesCallback(logger),
             ModelCheckpoint(
                 dirpath=path,
-                monitor="jaccard",
+                monitor="dice",
                 mode="max",
                 save_last=True,
                 save_top_k=1,
@@ -54,6 +64,34 @@ def train(arch, encoder):
     val_dataloader = datamodule.val_dataloader()
     trainer.fit(
         trainee, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader
+    )
+
+    model = Trainee.load_from_checkpoint(trainer.checkpoint_callback.best_model_path)
+
+    upload_to_hub(model, arch, encoder)
+
+
+@rank_zero_only
+def upload_to_hub(model, arch, encoder):
+    hfapi = HfApi()
+    branch_name = f"{arch}_{encoder}"
+    hfapi.create_repo(
+        "ClementP/DeepFiberQ",
+        token=HF_TOKEN,
+        exist_ok=True,
+        repo_type="model",
+    )
+    hfapi.create_branch(
+        "ClementP/DeepFiberQ",
+        branch=branch_name,
+        token=HF_TOKEN,
+        exist_ok=True,
+    )
+
+    model.push_to_hub(
+        "ClementP/DeepFiberQ",
+        branch=branch_name,
+        token=HF_TOKEN,
     )
 
 

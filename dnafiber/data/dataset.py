@@ -85,6 +85,22 @@ class FiberDatamodule(LightningDataModule):
                     A.Affine(),
                     A.ElasticTransform(),
                     A.RandomRotate90(),
+                    A.OneOf(
+                        [
+                            A.RandomBrightnessContrast(
+                                brightness_limit=(-0.2, 0.1),
+                                contrast_limit=(-0.2, 0.1),
+                                p=0.5,
+                            ),
+                            A.HueSaturationValue(
+                                hue_shift_limit=(-5, 5),
+                                sat_shift_limit=(-20, 20),
+                                val_shift_limit=(-20, 20),
+                                p=0.5,
+                            ),
+                        ]
+                    ),
+                    A.GaussNoise(std_range=(0.0, 0.1), p=0.5),
                 ]
             ),
             *self.cast_operators(),
@@ -102,6 +118,8 @@ class FiberDatamodule(LightningDataModule):
             batch_size=self.batch_size,
             shuffle=True,
             num_workers=self.num_workers,
+            pin_memory=True,
+            persistent_workers=True,
         )
 
     def val_dataloader(self):

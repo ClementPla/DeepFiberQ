@@ -7,12 +7,14 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torchmetrics import MetricCollection
 import torch.nn.functional as F
+from huggingface_hub import PyTorchModelHubMixin
 
 
-class Trainee(LightningModule):
-    def __init__(self, training_config, **model_config):
+class Trainee(LightningModule, PyTorchModelHubMixin):
+    def __init__(self, learning_rate=0.001, weight_decay=0.0002, **model_config):
         super().__init__()
-        self.model = smp.create_model(classes=3, **model_config)
+        self.model_config = model_config
+        self.model = smp.create_model(classes=3, **self.model_config, dropout=0.2)
         self.loss = GeneralizedDiceLoss(to_onehot_y=False, softmax=False)
         self.diceclLoss = SoftDiceclDiceLoss()
         self.metric = MetricCollection(
@@ -23,8 +25,9 @@ class Trainee(LightningModule):
                 ),
             }
         )
-        self.weight_decay = training_config["weight_decay"]
-        self.learning_rate = training_config["learning_rate"]
+        self.weight_decay = weight_decay
+        self.learning_rate = learning_rate
+        self.save_hyperparameters()
 
     def forward(self, x):
         yhat = self.model(x)
@@ -43,7 +46,7 @@ class Trainee(LightningModule):
         y_hat = F.softmax(y_hat, dim=1)
         y = F.one_hot(y.long(), num_classes=3)
         y = y.permute(0, 3, 1, 2).float()
-        loss = self.diceclLoss(y_hat, y) + self.loss(y_hat, y)
+        loss = self.loss(y_hat, y)
         return loss
 
     def validation_step(self, batch, batch_idx):

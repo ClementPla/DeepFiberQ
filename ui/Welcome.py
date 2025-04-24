@@ -37,7 +37,7 @@ def main():
         with cols[0]:
             st.write("Running on:")
         with cols[1]:
-            st.badge(device, icon="⚙️")
+            st.button(device, icon="⚙️", disabled=True)
         if not torch.cuda.is_available():
             with cols[2]:
                 st.warning("The application will run on CPU, which may be slower.")

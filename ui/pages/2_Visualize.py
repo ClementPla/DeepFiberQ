@@ -157,7 +157,10 @@ def start_inference():
     streamlit_bokeh(fig, use_container_width=True)
 
 
-if st.session_state.get("files_uploaded", None):
+if (
+    st.session_state.get("files_uploaded", None) is not None
+    and len(st.session_state.files_uploaded) > 0
+):
     files = st.session_state.files_uploaded
     selected_file = st.selectbox("Pick an image", [f.name for f in files])
     file = [f for f in files if f.name == selected_file][-1]

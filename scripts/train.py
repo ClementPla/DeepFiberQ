@@ -6,7 +6,7 @@ from pathlib import Path
 from nntools.utils import Config
 
 from dnafiber.data.dataset import FiberDatamodule
-from dnafiber.trainee import Trainee
+from dnafiber.trainee import Trainee, TraineeMaskRCNN
 from dnafiber.callbacks import LogPredictionSamplesCallback
 import torch
 import argparse
@@ -17,7 +17,7 @@ from huggingface_hub import HfApi
 from lightning.pytorch.utilities import rank_zero_only
 
 seed_everything(1234, workers=True)
-torch.set_float32_matmul_precision("medium")
+torch.set_float32_matmul_precision("high")
 
 load_dotenv()
 
@@ -33,28 +33,32 @@ def train(arch, encoder):
     if "mit" in encoder:
         c["trainer"]["strategy"] = "ddp_find_unused_parameters_true"
 
-    datamodule = FiberDatamodule(**c["data"])
+    datamodule = FiberDatamodule(**c["data"], use_bbox=arch == "maskrcnn")
+    traineeClass = TraineeMaskRCNN if arch == "maskrcnn" else Trainee
 
-    trainee = Trainee(**c["training"], **c["model"])
-    logger = WandbLogger(project="DeepFiberQ++ V2", config=c.tracked_params)
+    trainee = traineeClass(**c["training"], **c["model"])
+
+    logger = WandbLogger(
+        project="DeepFiberQ++ Combined-Finetuned", config=c.tracked_params
+    )
     try:
         run_name = logger.experiment.name
-        path = Path("checkpoints") / run_name
+        path = Path("checkpoints") / "DeepFiberQ++ Combined-Finetuned" / run_name
     except TypeError:
-        path = Path("checkpoints") / "default"
+        path = Path("checkpoints") / "DeepFiberQ++ Combined-Finetuned" / "default"
 
+    callbacks = [
+        ModelCheckpoint(
+            dirpath=path,
+            monitor="detection_recall",
+            mode="max",
+            save_last=True,
+            save_top_k=1,
+        ),
+    ]
     trainer = Trainer(
         **c["trainer"],
-        callbacks=[
-            LogPredictionSamplesCallback(logger),
-            ModelCheckpoint(
-                dirpath=path,
-                monitor="dice",
-                mode="max",
-                save_last=True,
-                save_top_k=1,
-            ),
-        ],
+        callbacks=callbacks,
         logger=logger,
     )
 
@@ -65,16 +69,17 @@ def train(arch, encoder):
     trainer.fit(
         trainee, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader
     )
+    # model = traineeClass.load_from_checkpoint(
+    #     "checkpoints/DeepFiberQ++ Combined-Finetuned/dauntless-dragon-7/epoch=699-step=8400.ckpt"
+    # )
 
-    model = Trainee.load_from_checkpoint(trainer.checkpoint_callback.best_model_path)
-
-    upload_to_hub(model, arch, encoder)
+    upload_to_hub(trainee, arch, encoder)
 
 
 @rank_zero_only
 def upload_to_hub(model, arch, encoder):
     hfapi = HfApi()
-    branch_name = f"{arch}_{encoder}"
+    branch_name = f"{arch}_{encoder}_finetuned"
     hfapi.create_repo(
         "ClementP/DeepFiberQ",
         token=HF_TOKEN,

@@ -23,7 +23,7 @@ class LogPredictionSamplesCallback(Callback):
                 y = y.squeeze(1)
             if len(pred.shape) == 4:
                 pred = pred.squeeze(1)
-
+            y = y.clamp(0, 2)
             columns = ["image"]
             class_labels = {0: "Background", 1: "Red", 2: "Green"}
 

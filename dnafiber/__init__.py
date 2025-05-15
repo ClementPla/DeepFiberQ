@@ -1,1 +1,1 @@
-from dnafiber.deployment import get_model
+from dnafiber.deployment import _get_model

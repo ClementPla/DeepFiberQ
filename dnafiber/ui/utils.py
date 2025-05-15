@@ -4,7 +4,7 @@ from dnafiber.data.utils import read_czi
 import cv2
 import numpy as np
 import math
-from dnafiber.trainee import Trainee
+from dnafiber.deployment import _get_model
 import PIL
 
 MAX_WIDTH = 512
@@ -16,6 +16,14 @@ MODELS_ZOO = {
     "U-Net++ SE-ResNet50": "unetplusplus_se_resnet50",
     "U-Net SE-ResNet50": "unet_se_resnet50",
     "U-Net MiT-B0": None,
+}
+
+TYPE_MAPPING = {
+    0: "BG",
+    1: "SINGLE",
+    2: "BILATERAL",
+    3: "TRICOLOR",
+    4: "MULTICOLOR",
 }
 
 
@@ -75,16 +83,7 @@ def bokeh_imshow(fig, image):
 
 @st.cache_resource
 def get_model(device, revision=None):
-    if revision is None:
-        model = Trainee.from_pretrained(
-            "ClementP/DeepFiberQ", arch="unet", encoder_name="mit_b0"
-        )
-    else:
-        model = Trainee.from_pretrained(
-            "ClementP/DeepFiberQ",
-            revision=revision,
-        )
-    return model.eval().to(device)
+    return _get_model(revision=revision, device=device)
 
 
 def pad_image_to_croppable(_image, bx, by, uid=None):

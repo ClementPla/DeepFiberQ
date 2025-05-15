@@ -63,5 +63,11 @@ def preprocess_tiff(raw_data):
 
 def read_czi(filepath):
     data = CziFile(filepath).asarray().squeeze()
+    return preprocess_tiff(data)
 
+
+def read_tiff(filepath):
+    from tifffile import imread
+
+    data = imread(filepath)
     return preprocess_tiff(data)

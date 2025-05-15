@@ -9,7 +9,7 @@ from dnafiber.ui.utils import (
     pad_image_to_croppable,
     MODELS_ZOO,
 )
-from dnafiber.ui.inference import inference
+from dnafiber.ui.inference import ui_inference
 from skimage.util import view_as_blocks
 import cv2
 import math
@@ -22,6 +22,7 @@ from skimage.measure import regionprops, label
 from catppuccin import PALETTE
 import numpy as np
 import torch
+from skimage.segmentation import expand_labels
 
 st.set_page_config(layout="wide")
 st.title("Visualization")
@@ -29,12 +30,16 @@ st.title("Visualization")
 
 def start_inference():
     image = st.session_state.image_inference
-    prediction = inference(
+    prediction = ui_inference(
         st.session_state.model,
         image,
         "cuda" if torch.cuda.is_available() else "cpu",
+        st.session_state.post_process,
         st.session_state.image_id,
     )
+    if st.session_state.post_process:
+        prediction = prediction[:, :, 0]
+    prediction = expand_labels(prediction, 1)
     # Scale the image and the prediction to max_width
     max_width = 2048
     if image.shape[1] > max_width:
@@ -49,6 +54,7 @@ def start_inference():
     scale = max_width / prediction.shape[1]
     labels = label(prediction > 0)
     rprops = regionprops(labels)
+    rprops = [r for r in rprops if r.area > 5]
     prediction = cv2.resize(
         prediction,
         (max_width, int(max_width * prediction.shape[0] / prediction.shape[1])),
@@ -59,8 +65,6 @@ def start_inference():
         (max_width, int(max_width * labels.shape[0] / labels.shape[1])),
         interpolation=cv2.INTER_NEAREST_EXACT,
     )
-
-    # prediction = expand_labels(prediction, 1)
 
     p1 = figure(
         width=600,
@@ -95,6 +99,7 @@ def start_inference():
     for i, region in enumerate(rprops):
         color = colors[i % len(colors)]
         minr, minc, maxr, maxc = region.bbox
+
         minr = minr * scale
         minc = minc * scale
         maxr = maxr * scale
@@ -192,13 +197,19 @@ if (
     blocks = view_as_blocks(image, (bx, by, 3))
     x_blocks, y_blocks = blocks.shape[0], blocks.shape[1]
     with st.sidebar:
-        with st.expander("Model"):
+        with st.expander("Model", expanded=True):
             model_name = st.selectbox(
                 "Select a model",
                 list(MODELS_ZOO.keys()),
                 index=0,
                 help="Select a model to use for inference",
             )
+            finetuned = st.checkbox(
+                "Use finetuned model",
+                value=False,
+                help="Use a finetuned model for inference",
+            )
+
             col1, col2 = st.columns(2)
             with col1:
                 st.write("Running on:")
@@ -208,7 +219,17 @@ if (
                     disabled=True,
                 )
 
-        st.session_state.model = MODELS_ZOO[model_name]
+            st.session_state.post_process = st.checkbox(
+                "Post-process",
+                value=True,
+                help="Apply post-processing to the prediction",
+            )
+
+        st.session_state.model = (
+            (MODELS_ZOO[model_name] + "_finetuned")
+            if finetuned
+            else MODELS_ZOO[model_name]
+        )
 
         which_y = st.session_state.get("which_y", 0)
         which_x = st.session_state.get("which_x", 0)

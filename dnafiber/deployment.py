@@ -1,23 +1,14 @@
-from huggingface_hub import PyTorchModelHubMixin
-import torch
-from segmentation_models_pytorch import create_model
+from dnafiber.trainee import Trainee
 
 
-class UnetMIT_B0(PyTorchModelHubMixin, torch.nn.Module):
-    def __init__(self, model=None):
-        super().__init__()
-        if model is not None:
-            self.model = model
-        else:
-            self.model = create_model(
-                arch="unet",
-                encoder_name="mit_b0",
-                classes=3,
-            )
-
-    def forward(self, x):
-        return self.model(x)
-
-
-def get_model():
-    return UnetMIT_B0.from_pretrained("ClementP/DeepFiberQ")
+def _get_model(revision, device="cuda"):
+    if revision is None:
+        model = Trainee.from_pretrained(
+            "ClementP/DeepFiberQ", arch="unet", encoder_name="mit_b0"
+        )
+    else:
+        model = Trainee.from_pretrained(
+            "ClementP/DeepFiberQ",
+            revision=revision,
+        )
+    return model.eval().to(device)

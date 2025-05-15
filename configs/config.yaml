@@ -5,7 +5,7 @@ training:
 trainer:
   max_epochs: 1000
   precision: 16-mixed
-  check_val_every_n_epoch: 50
+  check_val_every_n_epoch: 100
 
 model:
   encoder_name: mit_b2
@@ -15,8 +15,8 @@ model:
 
 data:
   shape: 1024
-  batch_size: 16
-  root_img: /home/clement/Documents/data/Yosra/LabelMed/input/
-  root_svg: /home/clement/Documents/data/Yosra/Segmentation/output/DNAFiberQuantification/annotations/
-  revision_file: /home/clement/Documents/data/Yosra/Segmentation/output/DNAFiberQuantification/.revisions.json
+  batch_size: 24
+  root_img: /home/clement/Documents/data/DNAFiber/
   crop_size: [512, 512]
+  use_cache: False
+  cache_option: duplicated_memory

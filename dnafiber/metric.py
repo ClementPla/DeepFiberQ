@@ -136,8 +136,9 @@ class DNAFIBERMetric(Metric):
 
     def compute(self):
         return {
-            "detection_recall": self.detection_tp
+            "detection_precision": self.detection_tp
             / (self.detection_tp + self.detection_fp + 1e-7),
+            "detection_recall": self.detection_tp / (self.N + 1e-7),
             "fiber_red_dice": self.fiber_red_dice / (self.detection_tp + 1e-7),
             "fiber_green_dice": self.fiber_green_dice / (self.detection_tp + 1e-7),
             "fiber_red_recall": self.fiber_red_recall / (self.detection_tp + 1e-7),

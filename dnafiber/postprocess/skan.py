@@ -2,6 +2,63 @@
 import numpy as np
 import cv2
 import itertools
+from numba import njit, int64
+from numba.typed import List
+from numba.types import Tuple
+
+# Define the element type: a tuple of two int64
+tuple_type = Tuple((int64, int64))
+
+
+def find_neighbours(fibers_map, point):
+    """
+    Find the next point in the fiber starting from the given point.
+    The function returns None if the point is not in the fiber.
+    """
+    # Get the fiber id
+    neighbors = []
+    h, w = fibers_map.shape
+    for i in range(-1, 2):
+        for j in range(-1, 2):
+            # Skip the center point
+            if i == 0 and j == 0:
+                continue
+            # Get the next point
+            nextpoint = (point[0] + i, point[1] + j)
+            # Check if the next point is in the image
+            if (
+                nextpoint[0] < 0
+                or nextpoint[0] >= h
+                or nextpoint[1] < 0
+                or nextpoint[1] >= w
+            ):
+                continue
+
+            # Check if the next point is in the fiber
+            if fibers_map[nextpoint]:
+                neighbors.append(nextpoint)
+    return neighbors
+
+
+def compute_points_angle(fibers_map, points, steps=25):
+    """
+    For each endpoint, follow the fiber for a given number of steps and estimate the tangent line by
+    fitting a line to the visited points. The angle of the line is returned.
+    """
+    points_angle = np.zeros((len(points),), dtype=np.float32)
+    for i, point in enumerate(points):
+        # Find the fiber it belongs to
+        # Lets navigate along the fiber starting from the point during steps pixels.
+        # We compute the angles at each step and return the mean angle.
+        visited = trace_from_point(
+            fibers_map > 0, (point[0], point[1]), max_length=steps
+        )
+        visited = np.array(visited)
+        vx, vy, x, y = cv2.fitLine(visited[:, ::-1], cv2.DIST_L2, 0, 0.01, 0.01)
+        # Compute the angle of the line
+        points_angle[i] = np.arctan(vy / vx)
+
+    return points_angle
 
 
 def generate_nonadjacent_combination(input_list, take_n):
@@ -64,7 +121,6 @@ def give_intersection_kernels():
     return kernels
 
 
-# Find the curve intersections
 def find_line_intersection(input_image, show=0):
     """
     Applies morphologyEx with parameter HitsMiss to look for all the curve
@@ -75,40 +131,81 @@ def find_line_intersection(input_image, show=0):
         output_image = (np.array dtype=np.uint8) image where the nonzero pixels
                         are the line intersection.
     """
+    input_image = input_image.astype(np.uint8)
     kernel = np.array(give_intersection_kernels())
     output_image = np.zeros(input_image.shape)
     for i in np.arange(len(kernel)):
-        out = cv2.morphologyEx(input_image, cv2.MORPH_HITMISS, kernel[i, :, :])
+        out = cv2.morphologyEx(
+            input_image,
+            cv2.MORPH_HITMISS,
+            kernel[i, :, :],
+            borderValue=0,
+            borderType=cv2.BORDER_CONSTANT,
+        )
         output_image = output_image + out
 
     return output_image
 
 
-#  finding corners
-def find_endoflines(input_image):
-    """ """
-    kernel_0 = np.array(([-1, -1, -1], [-1, 1, -1], [-1, 1, -1]), dtype="int")
+@njit
+def get_neighbors_8(y, x, shape):
+    neighbors = List.empty_list(tuple_type)
+    for dy in range(-1, 2):
+        for dx in range(-1, 2):
+            if dy == 0 and dx == 0:
+                continue
+            ny, nx = y + dy, x + dx
+            if 0 <= ny < shape[0] and 0 <= nx < shape[1]:
+                neighbors.append((ny, nx))
+    return neighbors
 
-    kernel_1 = np.array(([-1, -1, -1], [-1, 1, -1], [1, -1, -1]), dtype="int")
 
-    kernel_2 = np.array(([-1, -1, -1], [1, 1, -1], [-1, -1, -1]), dtype="int")
+@njit
+def find_endpoints(skel):
+    endpoints = List.empty_list(tuple_type)
+    for y in range(skel.shape[0]):
+        for x in range(skel.shape[1]):
+            if skel[y, x] == 1:
+                count = 0
+                neighbors = get_neighbors_8(y, x, skel.shape)
+                for ny, nx in neighbors:
+                    if skel[ny, nx] == 1:
+                        count += 1
+                if count == 1:
+                    endpoints.append((y, x))
+    return endpoints
 
-    kernel_3 = np.array(([1, -1, -1], [-1, 1, -1], [-1, -1, -1]), dtype="int")
 
-    kernel_4 = np.array(([-1, 1, -1], [-1, 1, -1], [-1, -1, -1]), dtype="int")
+@njit
+def trace_skeleton(skel):
+    endpoints = find_endpoints(skel)
+    if len(endpoints) < 1:
+        return List.empty_list(tuple_type)  # Return empty list with proper type
 
-    kernel_5 = np.array(([-1, -1, 1], [-1, 1, -1], [-1, -1, -1]), dtype="int")
+    return trace_from_point(skel, endpoints[0], max_length=skel.sum())
 
-    kernel_6 = np.array(([-1, -1, -1], [-1, 1, 1], [-1, -1, -1]), dtype="int")
 
-    kernel_7 = np.array(([-1, -1, -1], [-1, 1, -1], [-1, -1, 1]), dtype="int")
+@njit
+def trace_from_point(skel, point, max_length=25):
+    visited = np.zeros_like(skel, dtype=np.uint8)
+    path = List.empty_list(tuple_type)
 
-    kernel = np.array(
-        (kernel_0, kernel_1, kernel_2, kernel_3, kernel_4, kernel_5, kernel_6, kernel_7)
-    )
-    output_image = np.zeros(input_image.shape)
-    for i in np.arange(8):
-        out = cv2.morphologyEx(input_image, cv2.MORPH_HITMISS, kernel[i, :, :])
-        output_image = output_image + out
+    # Check if the starting point is on the skeleton
+    y, x = point
+    if y < 0 or y >= skel.shape[0] or x < 0 or x >= skel.shape[1] or skel[y, x] != 1:
+        return path
 
-    return output_image  # , np.where(output_image == 1)
+    stack = List.empty_list(tuple_type)
+    stack.append(point)
+
+    while len(stack) > 0 and len(path) < max_length:
+        y, x = stack.pop()
+        if visited[y, x]:
+            continue
+        visited[y, x] = 1
+        path.append((y, x))
+        neighbors = get_neighbors_8(y, x, skel.shape)
+        for ny, nx in neighbors:
+            if skel[ny, nx] == 1 and not visited[ny, nx]:
+                stack.append((ny, nx))
+    return path

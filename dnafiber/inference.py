@@ -8,7 +8,7 @@ from skimage.measure import label
 import albumentations as A
 from monai.inferers import SlidingWindowInferer
 from dnafiber.deployment import _get_model
-from dnafiber.postprocess.morphology import get_clean_skeleton_gpu
+from dnafiber.postprocess import refine_segmentation
 
 transform = A.Compose(
     [
@@ -52,60 +52,8 @@ def convert_mask_to_image(mask, expand=False):
     return image
 
 
-def post_process(prediction_map, extract_properties=False):
-    prediction_map = get_clean_skeleton_gpu(prediction_map) * prediction_map
-    # prediction_map = skeletonize(prediction_map > 0, method="lee") * prediction_map
-    type_map = np.zeros_like(prediction_map)
-    labeled_mask, count = label(prediction_map > 0, return_num=True, connectivity=2)
-    if extract_properties:
-        properties = dict()
-    for i in range(1, count + 1):
-        current_fiber = labeled_mask == i
-        bbox = np.where(current_fiber)
-        minr, minc, maxr, maxc = (
-            bbox[0].min(),
-            bbox[1].min(),
-            bbox[0].max(),
-            bbox[1].max(),
-        )
-        patch_fiber = (
-            current_fiber[minr:maxr, minc:maxc] * prediction_map[minr:maxr, minc:maxc]
-        )
-        # Check if the fiber is too small or too large
-
-        if (patch_fiber > 0).sum() < 20:
-            prediction_map[current_fiber] = 0
-            continue
-        _, n_segments = label(patch_fiber, return_num=True, connectivity=2)
-
-        if n_segments == 1 or n_segments > 3:
-            prediction_map[current_fiber] = 0
-            continue
-        type_map[current_fiber] = n_segments
-
-        if extract_properties:
-            properties[i] = {
-                "red": np.sum(patch_fiber == 1),
-                "green": np.sum(patch_fiber == 2),
-                "type": "bilateral" if n_segments == 2 else "trilateral",
-                "bbox": {
-                    "minr": minr,
-                    "minc": minc,
-                    "maxr": maxr,
-                    "maxc": maxc,
-                },
-            }
-
-    prediction_map = np.stack([prediction_map, type_map], axis=-1)
-
-    # prediction_map = expand_labels(prediction_map, distance=5)
-    if extract_properties:
-        return prediction_map, properties
-    else:
-        return prediction_map
-
-
-def infer(model, image, device, scale=0.13):
+@torch.inference_mode()
+def infer(model, image, device, scale=0.13, to_numpy=True):
     if isinstance(model, str):
         model = _get_model(device=device, revision=model)
     model_pixel_size = 0.26
@@ -113,26 +61,36 @@ def infer(model, image, device, scale=0.13):
     scale = scale / model_pixel_size
     tensor = transform(image=image)["image"].unsqueeze(0).to(device)
     h, w = tensor.shape[2], tensor.shape[3]
-    tensor = F.interpolate(
-        tensor,
-        size=(int(h * scale), int(w * scale)),
-        mode="bilinear",
-    )
-    inferer = SlidingWindowInferer(
-        roi_size=(2048, 2048),
-        sw_batch_size=1,
-        overlap=0.25,
-        mode="gaussian",
-        device=device,
-        progress=True,
-    )
+
     with torch.inference_mode():
-        output = inferer(tensor, model)
+        tensor = F.interpolate(
+            tensor,
+            size=(int(h * scale), int(w * scale)),
+            mode="bilinear",
+        )
+        if tensor.shape[2] > 2048 or tensor.shape[3] > 2048:
+            inferer = SlidingWindowInferer(
+                roi_size=(2048, 2048),
+                sw_batch_size=1,
+                overlap=0.25,
+                mode="gaussian",
+                device=device,
+                progress=True,
+            )
+            output = inferer(tensor, model)
+        else:
+            output = model(tensor)
+
+        probabilities = F.softmax(output, dim=1)
+
         output = F.interpolate(
-            output.argmax(dim=1, keepdim=True).float(),
+            probabilities.argmax(dim=1, keepdim=True).float(),
             size=(h, w),
             mode="nearest",
         )
-        output = output.squeeze().long().cpu().numpy()
+
+    output = output.squeeze().byte()
+    if to_numpy:
+        output = output.cpu().numpy()
 
     return output

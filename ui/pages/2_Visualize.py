@@ -18,70 +18,93 @@ from bokeh.models import (
     HoverTool,
 )
 import streamlit_image_coordinates
-from skimage.measure import regionprops, label
 from catppuccin import PALETTE
 import numpy as np
 import torch
 from skimage.segmentation import expand_labels
+from dnafiber.deployment import _get_model
 
 st.set_page_config(layout="wide")
 st.title("Visualization")
 
 
+@st.cache_resource
+def get_model(model_name):
+    model = _get_model(
+        device="cuda" if torch.cuda.is_available() else "cpu",
+        revision=model_name,
+    )
+    return model
+
+
 def start_inference():
     image = st.session_state.image_inference
+    model = get_model(st.session_state.model)
     prediction = ui_inference(
-        st.session_state.model,
+        model,
         image,
         "cuda" if torch.cuda.is_available() else "cpu",
         st.session_state.post_process,
         st.session_state.image_id,
     )
-    if st.session_state.post_process:
-        prediction = prediction[:, :, 0]
-    prediction = expand_labels(prediction, 1)
-    # Scale the image and the prediction to max_width
+    prediction = [
+        p
+        for p in prediction
+        if (p.fiber_type != "single") and p.fiber_type != "multiple"
+    ]
     max_width = 2048
     if image.shape[1] > max_width:
         st.toast("Images are displayed at a lower resolution of 2048 pixel wide")
 
-    image = cv2.resize(
-        image,
-        (max_width, int(max_width * image.shape[0] / image.shape[1])),
-        interpolation=cv2.INTER_LINEAR,
-    )
-
-    scale = max_width / prediction.shape[1]
-    labels = label(prediction > 0)
-    rprops = regionprops(labels)
-    rprops = [r for r in rprops if r.area > 5]
-    prediction = cv2.resize(
-        prediction,
-        (max_width, int(max_width * prediction.shape[0] / prediction.shape[1])),
-        interpolation=cv2.INTER_NEAREST_EXACT,
-    )
-    labels = cv2.resize(
-        labels,
-        (max_width, int(max_width * labels.shape[0] / labels.shape[1])),
-        interpolation=cv2.INTER_NEAREST_EXACT,
-    )
-
+    scale = 1
+    # Resize the image to max_width
+    if image.shape[1] > max_width:
+        scale = max_width / image.shape[1]
+        image = cv2.resize(
+            image,
+            None,
+            fx=scale,
+            fy=scale,
+            interpolation=cv2.INTER_LINEAR,
+        )
+    for fiber in prediction:
+        fiber.bbox = (
+            int(fiber.bbox[0] * scale),
+            int(fiber.bbox[1] * scale),
+            int(fiber.bbox[2] * scale),
+            int(fiber.bbox[3] * scale),
+        )
+        fiber.data = cv2.resize(
+            expand_labels(fiber.data, 1),
+            None,
+            fx=scale,
+            fy=scale,
+            interpolation=cv2.INTER_NEAREST,
+        )
+    h, w = image.shape[:2]
+    labels_maps = np.zeros((h, w), dtype=np.uint8)
+    for i, region in enumerate(prediction):
+        h, w = region.data.shape[:2]
+        labels_maps[
+            region.bbox[1] : region.bbox[1] + h,
+            region.bbox[0] : region.bbox[0] + w,
+        ] = region.data
     p1 = figure(
         width=600,
         x_range=Range1d(-image.shape[1] / 8, image.shape[1] * 1.125, bounds="auto"),
         y_range=Range1d(image.shape[0] * 1.125, -image.shape[0] / 8, bounds="auto"),
-        title=f"Detected fibers: {len(rprops)}",
+        title=f"Detected fibers: {len(prediction)}",
         tools="pan,wheel_zoom,box_zoom,reset",
         active_scroll="wheel_zoom",
     )
 
     p1.image(
-        image=[prediction],
+        image=[labels_maps],
         x=0,
         y=0,
-        dw=prediction.shape[1],
-        dh=prediction.shape[0],
-        palette=["black", "red", "green"] if np.max(prediction) > 0 else ["black"],
+        dw=labels_maps.shape[1],
+        dh=labels_maps.shape[0],
+        palette=["black", "red", "green"] if np.max(labels_maps) > 0 else ["black"],
     )
     p2 = figure(
         x_range=p1.x_range,
@@ -96,29 +119,18 @@ def start_inference():
         x=[], y=[], width=[], height=[], color=[], red=[], green=[], ratio=[]
     )
     np.random.shuffle(colors)
-    for i, region in enumerate(rprops):
+    for i, region in enumerate(prediction):
         color = colors[i % len(colors)]
-        minr, minc, maxr, maxc = region.bbox
+        x, y, w, h = region.bbox
 
-        minr = minr * scale
-        minc = minc * scale
-        maxr = maxr * scale
-        maxc = maxc * scale
-        data_source["x"].append((minc + maxc) / 2)
-        data_source["y"].append((minr + maxr) / 2)
-        data_source["width"].append(maxc - minc)
-        data_source["height"].append(maxr - minr)
+        data_source["x"].append((x + w / 2))
+        data_source["y"].append((y + h / 2))
+        data_source["width"].append(w)
+        data_source["height"].append(h)
         data_source["color"].append(color)
-        red_length = (
-            st.session_state["pixel_size"]
-            * np.sum(((labels == region.label) * prediction) == 1)
-            / scale
-        )
-        green_length = (
-            st.session_state["pixel_size"]
-            * np.sum(((labels == region.label) * prediction) == 2)
-            / scale
-        )
+        r, g = region.counts
+        red_length = st.session_state["pixel_size"] * r / scale
+        green_length = st.session_state["pixel_size"] * g / scale
         data_source["red"].append(f"{red_length:.2f} µm")
         data_source["green"].append(f"{green_length:.2f} µm")
         data_source["ratio"].append(f"{red_length / green_length:.2f}")
@@ -206,7 +218,7 @@ if (
             )
             finetuned = st.checkbox(
                 "Use finetuned model",
-                value=False,
+                value=True,
                 help="Use a finetuned model for inference",
             )
 
@@ -278,6 +290,7 @@ if (
     image = blocks[which_y, which_x, 0]
     with st.sidebar:
         st.image(image, caption="Selected block", use_container_width=True)
+
     st.session_state.image_inference = image
     st.session_state.image_id = (
         file.file_id + str(which_x) + str(which_y) + str(bx) + str(by)

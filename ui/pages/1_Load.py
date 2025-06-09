@@ -23,8 +23,9 @@ with cols[0]:
     st.write(
         "Please select the channel to be used for the analysis (only for CZI files)."
     )
+    st.write("TODO")
 with cols[2]:
-    st.write("### Pixel size")
+    st.write("### Pixel size")  
     st.session_state["pixel_size"] = st.number_input(
         "Please confirm the pixel size of the image in µm (default: 0.13 µm).",
         value=0.13,

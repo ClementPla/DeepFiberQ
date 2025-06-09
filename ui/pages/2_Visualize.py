@@ -7,8 +7,8 @@ from dnafiber.ui.utils import (
     get_resized_image,
     bokeh_imshow,
     pad_image_to_croppable,
-    MODELS_ZOO,
 )
+from dnafiber.deployment import MODELS_ZOO
 from dnafiber.ui.inference import ui_inference
 from skimage.util import view_as_blocks
 import cv2
@@ -259,6 +259,21 @@ if (
         x2 = math.floor((which_x + 1) * by / scale_w)
         # Draw a rectangle around the selected block
 
+        # Check if the coordinates are within the bounds of the image
+        while y2 > small_h:
+            which_y -= 1
+            y1 = math.floor(which_y * bx / scale_h)
+            y2 = math.floor((which_y + 1) * bx / scale_h)
+        while x2 > small_w:
+            which_x -= 1
+            x1 = math.floor(which_x * by / scale_w)
+            x2 = math.floor((which_x + 1) * by / scale_w)
+        
+        st.session_state["which_x"] = which_x
+        st.session_state["which_y"] = which_y
+        
+
+
         # Draw a grid on the thumbnail
         for i in range(0, small_h, int(bx // scale_h)):
             cv2.line(thumbnail, (0, i), (small_w, i), (255, 255, 255), 1)
@@ -272,6 +287,8 @@ if (
             (0, 0, 255),
             5,
         )
+
+        st.write("### Select a block")
 
         coordinates = streamlit_image_coordinates.streamlit_image_coordinates(
             thumbnail, use_column_width=True

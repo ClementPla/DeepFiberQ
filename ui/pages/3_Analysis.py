@@ -1,7 +1,8 @@
 import streamlit as st
 from dnafiber.inference import infer
 import torch
-from dnafiber.ui.utils import get_image, MODELS_ZOO
+from dnafiber.ui.utils import get_image
+from dnafiber.deployment import MODELS_ZOO
 import pandas as pd
 import plotly.express as px
 from dnafiber.postprocess import refine_segmentation
@@ -91,9 +92,10 @@ def plot_result(seleted_category=None):
 
 
 def run_inference(model_name, pixel_size):
+    is_cuda_available = torch.cuda.is_available()
     model = _get_model(
         revision=model_name,
-        device="cuda" if torch.cuda.is_available() else "cpu",
+        device="cuda" if is_cuda_available else "cpu",
     )
     my_bar = st.progress(0, text="Running segmentation...")
     all_files = st.session_state.files_uploaded
@@ -106,7 +108,7 @@ def run_inference(model_name, pixel_size):
         prediction = infer(
             model,
             image,
-            "cuda" if torch.cuda.is_available() else "cpu",
+            "cuda" if is_cuda_available else "cpu",
             scale=pixel_size,
         )
         print(f"Prediction time: {time.time() - start:.2f} seconds for {file.name}")
@@ -116,11 +118,11 @@ def run_inference(model_name, pixel_size):
             # Extract blocks from the prediction
             blocks = F.unfold(
                 torch.from_numpy(prediction).unsqueeze(0).float(),
-                kernel_size=(2048, 2048),
-                stride=(2048, 2048),
+                kernel_size=(4096, 4096),
+                stride=(4096, 4096),
             )
-            blocks = blocks.view(2048, 2048, -1).permute(2, 0, 1).byte().numpy()
-            results = Parallel(n_jobs=-1)(
+            blocks = blocks.view(4096, 4096, -1).permute(2, 0, 1).byte().numpy()
+            results = Parallel(n_jobs=4)(
                 delayed(refine_segmentation)(block) for block in blocks
             )
             results = [x for xs in results for x in xs]

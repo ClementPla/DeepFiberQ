@@ -10,13 +10,7 @@ import PIL
 MAX_WIDTH = 512
 MAX_HEIGHT = 512
 
-MODELS_ZOO = {
-    "SegFormer MiT-B4": "segformer_mit_b4",
-    "segformer MiT-B2": "segformer_mit_b2",
-    "U-Net++ SE-ResNet50": "unetplusplus_se_resnet50",
-    "U-Net SE-ResNet50": "unet_se_resnet50",
-    "U-Net MiT-B0": None,
-}
+
 
 TYPE_MAPPING = {
     0: "BG",

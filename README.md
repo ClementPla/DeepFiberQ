@@ -34,6 +34,10 @@ streamlit run ui/Welcome.py
 
 Then open your web browser and go to `http://localhost:8501` to access the DN-AI interface.
 
+Screenshots of the GUI:
+
+![DN-AI GUI](imgs/screenshot.png)
+
 ### Python Package
 To install DN-AI as a Python package, you can use pip:
 

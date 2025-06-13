@@ -27,7 +27,7 @@ Before installing DN-AI, make sure you have the following prerequisites installe
 To install DN-AI with a graphical user interface, you can use the following command from a terminal or command prompt:
 
 ```bash
-git clone https://github.com/ClementPla/DeepFiberQ/tree/main
+git clone https://github.com/ClementPla/DeepFiberQ.git
 ```
 Then, navigate to the `DeepFiberQ` directory and run the following command:
 

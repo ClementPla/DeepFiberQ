@@ -156,7 +156,7 @@ def start_inference():
     )
 
     hover = HoverTool(
-        tooltips=f'<p style="color:{st.session_state["color1"]};">@firstAnalog</p> <p style="color:{st.session_state["color2"]};">@secondAnalog</p><b> Ratio: @ratio</b>',
+        tooltips=f'<p style="color:{st.session_state['color1']};">@firstAnalog</p> <p style="color:{st.session_state['color2']};">@secondAnalog</p><b> Ratio: @ratio</b>',
     )
     hover.renderers = [rect1, rect2]
     hover.point_policy = "follow_mouse"

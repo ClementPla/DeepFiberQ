@@ -46,14 +46,14 @@ def build_individual_loader():
    
     cols = st.columns(2)
     with cols[1]:
-        st.markdown(f"<h3 style='color: {st.session_state["color2"]};'>Second analog</h3>", unsafe_allow_html=True)
+        st.markdown(f"<h3 style='color: {st.session_state['color2']};'>Second analog</h3>", unsafe_allow_html=True)
         cldu_files = st.file_uploader(
             label="Upload second analog file(s)",
             accept_multiple_files=True,
             type=["czi", "jpeg", "jpg", "png", "tiff", "tif"],
         )
     with cols[0]:
-        st.markdown(f"<h3 style='color: {st.session_state["color1"]};'>First analog</h3>", unsafe_allow_html=True)
+        st.markdown(f"<h3 style='color: {st.session_state['color1']};'>First analog</h3>", unsafe_allow_html=True)
         idu_files = st.file_uploader(
             label="Upload first analog file(s)",
             accept_multiple_files=True,

@@ -2,7 +2,7 @@
 
 This is the official repository for DN-AI, an automated tool for measurement of differentiated DNA replication in fluorescence microscopy images.
 
-DN-AI offers different solutions for biologists to measure DNA replication in fluorescence microscopy images, without requiring any programming skills. See the [Installation](#installation) section for instructions on how to install DN-AI.
+DN-AI offers different solutions for biologists to measure DNA replication in fluorescence microscopy images, without requiring programming skills. See the [Installation](#installation) section for instructions on how to install DN-AI.
 
 ## Features
 

@@ -27,6 +27,7 @@ streamlit_image_coordinates = "0.2.1"
 catppuccin = "2.4.1"
 scikit-image = "0.25.2"
 kornia = "0.7.3"
+numba = "0.60.0"
 
 [build-system]
 requires = ["poetry-core"]

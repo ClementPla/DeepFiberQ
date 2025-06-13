@@ -28,6 +28,8 @@ catppuccin = "2.4.1"
 scikit-image = "0.25.2"
 kornia = "0.7.3"
 numba = "0.60.0"
+joblib = "1.4.2"
+
 
 [build-system]
 requires = ["poetry-core"]

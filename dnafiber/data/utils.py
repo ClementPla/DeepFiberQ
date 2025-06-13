@@ -47,7 +47,7 @@ def extract_bboxes(mask):
 def preprocess_tiff(raw_data):
     MAX_VALUE = 2**16 - 1
     h, w = raw_data.shape[1:3]
-    orders = [1, 0]
+    orders = np.arange(raw_data.shape[0])[::-1]  # Reverse channel order
     result = np.zeros((h, w, 3), dtype=np.uint8)
     for i, chan in enumerate(raw_data):
         hist, bins = np.histogram(chan.ravel(), MAX_VALUE + 1, (0, MAX_VALUE + 1))
@@ -61,13 +61,20 @@ def preprocess_tiff(raw_data):
     return result
 
 
-def read_czi(filepath):
-    data = CziFile(filepath).asarray().squeeze()
-    return preprocess_tiff(data)
+def read_czi(filepath, reverse_channels=False):
+    data = CziFile(filepath)
+    image = preprocess_tiff(data.asarray().squeeze())
+    if reverse_channels:
+        # Reverse channels 0 and 1
+        image = image[:, :, [1, 0, 2]]
+    return image
 
 
-def read_tiff(filepath):
+def read_tiff(filepath, reverse_channels=False):
     from tifffile import imread
-
     data = imread(filepath)
-    return preprocess_tiff(data)
+    image = preprocess_tiff(data)
+    if reverse_channels:
+        # Reverse channels 0 and 1
+        image = image[:, :, [1, 0, 2]]
+    return image

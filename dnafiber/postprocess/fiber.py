@@ -76,8 +76,8 @@ class FiberProps:
     def is_valid(self):
         return (
             self.fiber_type == "double"
-            or self.fiber_type == "red-green-red"
-            or self.fiber_type == "green-red-green"
+            or self.fiber_type == "one-two-one"
+            or self.fiber_type == "two-one-two"
         )
 
 
@@ -95,8 +95,8 @@ def estimate_fiber_category(fiber: np.ndarray) -> str:
         return "double"
     elif n_ccs == 3:
         if values[0] == 1:
-            return "red-green-red"
+            return "one-two-one"
         else:
-            return "green-red-green"
+            return "two-one-two"
     else:
         return "multiple"

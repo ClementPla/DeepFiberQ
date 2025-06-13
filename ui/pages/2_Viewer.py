@@ -4,6 +4,7 @@ from bokeh.layouts import gridplot
 from streamlit_bokeh import streamlit_bokeh
 from dnafiber.ui.utils import (
     get_image,
+    get_multifile_image,
     get_resized_image,
     bokeh_imshow,
     pad_image_to_croppable,
@@ -25,7 +26,7 @@ from skimage.segmentation import expand_labels
 from dnafiber.deployment import _get_model
 
 st.set_page_config(layout="wide")
-st.title("Visualization")
+st.title("Viewer")
 
 
 @st.cache_resource
@@ -104,7 +105,7 @@ def start_inference():
         y=0,
         dw=labels_maps.shape[1],
         dh=labels_maps.shape[0],
-        palette=["black", "red", "green"] if np.max(labels_maps) > 0 else ["black"],
+        palette=["black", st.session_state["color1"], st.session_state["color2"]] if np.max(labels_maps) > 0 else ["black"],
     )
     p2 = figure(
         x_range=p1.x_range,
@@ -116,7 +117,7 @@ def start_inference():
     bokeh_imshow(p2, image)
     colors = [c.hex for c in PALETTE.latte.colors][:14]
     data_source = dict(
-        x=[], y=[], width=[], height=[], color=[], red=[], green=[], ratio=[]
+        x=[], y=[], width=[], height=[], color=[], firstAnalog=[], secondAnalog=[], ratio=[]
     )
     np.random.shuffle(colors)
     for i, region in enumerate(prediction):
@@ -131,9 +132,9 @@ def start_inference():
         r, g = region.counts
         red_length = st.session_state["pixel_size"] * r / scale
         green_length = st.session_state["pixel_size"] * g / scale
-        data_source["red"].append(f"{red_length:.2f} µm")
-        data_source["green"].append(f"{green_length:.2f} µm")
-        data_source["ratio"].append(f"{red_length / green_length:.2f}")
+        data_source["firstAnalog"].append(f"{red_length:.2f} µm")
+        data_source["secondAnalog"].append(f"{green_length:.2f} µm")
+        data_source["ratio"].append(f"{green_length / red_length:.2f}")
 
     rect1 = p1.rect(
         x="x",
@@ -155,7 +156,7 @@ def start_inference():
     )
 
     hover = HoverTool(
-        tooltips='<p style="color:red;">@red</p> <p style="color:green;">@green</p><b> Ratio: @ratio</b>',
+        tooltips=f'<p style="color:{st.session_state["color1"]};">@firstAnalog</p> <p style="color:{st.session_state["color2"]};">@secondAnalog</p><b> Ratio: @ratio</b>',
     )
     hover.renderers = [rect1, rect2]
     hover.point_policy = "follow_mouse"
@@ -174,14 +175,56 @@ def start_inference():
     streamlit_bokeh(fig, use_container_width=True)
 
 
-if (
-    st.session_state.get("files_uploaded", None) is not None
-    and len(st.session_state.files_uploaded) > 0
-):
+def on_session_start():
+    can_start = st.session_state.get("files_uploaded", None) is not None and len(st.session_state.files_uploaded) > 0
+
+    if can_start:
+        return can_start
+    
+    cldu_exists = st.session_state.get("files_uploaded_cldu", None) is not None and len(st.session_state.files_uploaded_cldu) > 0
+    idu_exists = st.session_state.get("files_uploaded_idu", None) is not None and len(st.session_state.files_uploaded_idu) > 0
+
+    if cldu_exists and idu_exists:
+        
+        if len(st.session_state.get("files_uploaded_cldu")) != len(st.session_state.get("files_uploaded_idu")):
+            st.error("Please upload the same number of CldU and IdU files.")
+            return False
+
+def create_display_files(files):
+    if files is None or len(files) == 0:
+        return "No files uploaded"
+    display_files = []
+    for file in files:
+        if isinstance(file, tuple):
+            if file[0] is None:
+                name = f"Second analog only {file[1].name}"
+            elif file[1] is None:
+                name = f"First analog only {file[0].name}"
+            else:
+                name = f"{file[0].name} and {file[1].name}"
+            display_files.append(name)
+        else:
+            display_files.append(file.name)
+    return display_files
+
+if on_session_start():
     files = st.session_state.files_uploaded
-    selected_file = st.selectbox("Pick an image", [f.name for f in files])
-    file = [f for f in files if f.name == selected_file][-1]
-    image = get_image(file, file.file_id)
+    displayed_names = create_display_files(files)
+    selected_file = st.selectbox("Pick an image", displayed_names, index=0, help="Select an image to view and analyze.")
+    
+    # Find index of the selected file
+    index = displayed_names.index(selected_file)
+    file = files[index]
+    if isinstance(file, tuple):
+        file_id = file[0].file_id if file[0] is not None else file[1].file_id
+        if file[0] is None or file:
+            missing = "First analog" if file[0] is None else "Second analog"
+            st.warning("In this image, {missing} channel is missing. We assume the intended goal is to segment the DNA fibers without differentiation. \
+                       Note the model may still predict two classes and try to compute a ratio; these informations can be ignored.")
+        image = get_multifile_image(file)
+    else:
+        file_id = file.file_id
+        image = get_image(file, reverse_channel=st.session_state.get("reverse_channels", False),  id=file_id)
     h, w = image.shape[:2]
 
     with st.sidebar:
@@ -203,8 +246,8 @@ if (
         block_size = w
 
     bx = by = block_size
-    image = pad_image_to_croppable(image, bx, by, file.file_id + str(bx) + str(by))
-    thumbnail = get_resized_image(image, file.file_id)
+    image = pad_image_to_croppable(image, bx, by, file_id + str(bx) + str(by))
+    thumbnail = get_resized_image(image, file_id)
 
     blocks = view_as_blocks(image, (bx, by, 3))
     x_blocks, y_blocks = blocks.shape[0], blocks.shape[1]
@@ -310,7 +353,7 @@ if (
 
     st.session_state.image_inference = image
     st.session_state.image_id = (
-        file.file_id + str(which_x) + str(which_y) + str(bx) + str(by)
+        file_id + str(which_x) + str(which_y) + str(bx) + str(by)
     )
     col1, col2, col3 = st.columns([1, 1, 1])
     start_inference()

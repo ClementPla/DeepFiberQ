@@ -1,6 +1,6 @@
 import PIL.Image
 import streamlit as st
-from dnafiber.data.utils import read_czi
+from dnafiber.data.utils import read_czi, read_tiff
 import cv2
 import numpy as np
 import math
@@ -20,24 +20,73 @@ TYPE_MAPPING = {
     4: "MULTICOLOR",
 }
 
-
 @st.cache_data
-def get_image(_filepath, id):
+def get_image(_filepath, reverse_channel, id):
     filename = str(_filepath.name)
     if filename.endswith(".czi"):
-        return read_czi(_filepath)
+        return read_czi(_filepath, reverse_channel)
     elif filename.endswith(".tif") or filename.endswith(".tiff"):
-        raise NotImplementedError("Tiff files are not supported yet")
+        return read_tiff(_filepath, reverse_channel)
     elif (
         filename.endswith(".png")
         or filename.endswith(".jpg")
         or filename.endswith(".jpeg")
     ):
         image = PIL.Image.open(_filepath)
-        return np.array(image)
+        image = np.array(image)
+        return image
     else:
         raise NotImplementedError(f"File type {filename} is not supported yet")
 
+def get_multifile_image(_filepaths):
+    result = None
+
+    if _filepaths[0] is not None:
+        chan1 = get_image(_filepaths[0], False, _filepaths[0].file_id)
+        chan1 = cv2.cvtColor(chan1, cv2.COLOR_RGB2GRAY)
+        h, w = chan1.shape[:2]
+    else:
+        chan1 = None
+    if _filepaths[1] is not None:
+        chan2 = get_image(_filepaths[1], False, _filepaths[1].file_id)
+        chan2 = cv2.cvtColor(chan2, cv2.COLOR_RGB2GRAY)
+        h, w = chan2.shape[:2]
+    else:
+        chan2 = None
+
+    result = np.zeros((h, w, 3), dtype=np.uint8)
+    
+    if chan1 is not None:
+        result[:, :, 0] = chan1
+    else:
+        result[:, :, 0] = chan2
+    
+    if chan2 is not None:
+        result[:, :, 1] = chan2
+    else:
+        result[:, :, 1] = chan1
+    
+    return result
+
+
+
+
+
+    # filename = str(_filepath.name)
+    # if filename.endswith(".czi"):
+    #     return read_czi(_filepath, reverse_channel)
+    # elif filename.endswith(".tif") or filename.endswith(".tiff"):
+    #     return read_tiff(_filepath, reverse_channel)
+    # elif (
+    #     filename.endswith(".png")
+    #     or filename.endswith(".jpg")
+    #     or filename.endswith(".jpeg")
+    # ):
+    #     image = PIL.Image.open(_filepath)
+    #     image = np.array(image)
+    #     return image
+    # else:
+    #     raise NotImplementedError(f"File type {filename} is not supported yet")
 
 @st.cache_data
 def get_resized_image(_image, id):

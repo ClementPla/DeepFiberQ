@@ -21,10 +21,10 @@ def format_results(results: list[FiberProps], pixel_size: float) -> pd.DataFrame
     """
     results = [fiber for fiber in results if fiber.is_valid]
     all_results = dict(
-        red=[], green=[], length=[], ratio=[], fiber_type=[]
+        FirstAnalog=[], SecondAnalog=[], length=[], ratio=[], fiber_type=[]
     )
-    all_results["red"].extend([fiber.red * pixel_size for fiber in results])
-    all_results["green"].extend([fiber.green * pixel_size for fiber in results])
+    all_results["FirstAnalog"].extend([fiber.red * pixel_size for fiber in results])
+    all_results["SecondAnalog"].extend([fiber.green * pixel_size for fiber in results])
     all_results["length"].extend(
         [fiber.red * pixel_size + fiber.green * pixel_size for fiber in results]
     )
@@ -38,8 +38,6 @@ def format_results(results: list[FiberProps], pixel_size: float) -> pd.DataFrame
 
 MODELS_ZOO = {
     "SegFormer MiT-B4": "segformer_mit_b4",
-    "segformer MiT-B2": "segformer_mit_b2",
-    "U-Net++ SE-ResNet50": "unetplusplus_se_resnet50",
+    "SegFormer MiT-B2": "segformer_mit_b2",
     "U-Net SE-ResNet50": "unet_se_resnet50",
-    "U-Net MiT-B0": None,
 }

@@ -16,7 +16,7 @@ def main():
     st.write("## Features")
     st.write(
         "- **Image loading**: The application accepts CZI file, jpeg and PNG file. \n"
-        "- **Image segmentation**: The application provides a set of tools to segment the DNA fiber and measure the ratio. \n"
+        "- **Image segmentation**: The application provides a set of tools to segment the DNA fiber and measure the ratio between analogs. \n"
     )
     st.write("## Technical details")
     cols = st.columns(2)

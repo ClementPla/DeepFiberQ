@@ -24,7 +24,7 @@ Before installing DN-AI, make sure you have the following prerequisites installe
 - [git](https://git-scm.com/downloads) (version control system)
 
 ### Graphical User Interface (GUI)
-To install DN-AI with a graphical user interface, you can use the following command:
+To install DN-AI with a graphical user interface, you can use the following command from a terminal or command prompt:
 
 ```bash
 git clone https://github.com/ClementPla/DeepFiberQ/tree/main

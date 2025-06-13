@@ -15,6 +15,14 @@ DN-AI offers different solutions for biologists to measure DNA replication in fl
 
 ## Installation
 
+DN-AI relies on Python. We recommend installing its latest version (3.10 or higher) and using a virtual environment to avoid conflicts with other packages.
+
+### Prerequisites
+Before installing DN-AI, make sure you have the following prerequisites installed:
+- [Python 3.10 or higher](https://www.python.org/downloads/) 
+- [pip](https://pip.pypa.io/en/stable/installation/) (Python package installer)
+- [git](https://git-scm.com/downloads) (version control system)
+
 ### Graphical User Interface (GUI)
 To install DN-AI with a graphical user interface, you can use the following command:
 

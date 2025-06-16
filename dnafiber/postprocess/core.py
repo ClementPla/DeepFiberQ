@@ -8,7 +8,7 @@ from scipy.sparse.csgraph import connected_components
 from scipy.sparse import csr_array
 from skimage.morphology import skeletonize
 from dnafiber.postprocess.skan import find_line_intersection
-from dnafiber.postprocess.fiber import Fiber, FiberProps
+from dnafiber.postprocess.fiber import Fiber, FiberProps, Bbox
 from itertools import compress
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
@@ -163,6 +163,7 @@ def handle_multiple_fiber_in_cc(fiber, junctions_fiber, coordinates):
             max_x - min_x,
             max_y - min_y,
         )
+        bbox = Bbox(x=bbox[0], y=bbox[1], width=bbox[2], height=bbox[3])
         result = Fiber(bbox=bbox, data=new_fiber)
         results.append(result)
     return results
@@ -245,7 +246,13 @@ def refine_segmentation(segmentation, fix_junctions=True, show=False):
             compress(local_fibers, np.logical_not(has_junctions)),
             compress(coordinates, np.logical_not(has_junctions)),
         ):
-            fibers.append(Fiber(bbox=coordinate, data=fiber))
+            bbox = Bbox(
+                x=coordinate[0],
+                y=coordinate[1],
+                width=coordinate[2],
+                height=coordinate[3],
+            )
+            fibers.append(Fiber(bbox=bbox, data=fiber))
 
         fibers += handle_ccs_with_junctions(
             compress(local_fibers, has_junctions),
@@ -254,7 +261,13 @@ def refine_segmentation(segmentation, fix_junctions=True, show=False):
         )
     else:
         for fiber, coordinate in zip(local_fibers, coordinates):
-            fibers.append(Fiber(bbox=coordinate, data=fiber))
+            bbox = Bbox(
+                x=coordinate[0],
+                y=coordinate[1],
+                width=coordinate[2],
+                height=coordinate[3],
+            )
+            fibers.append(Fiber(bbox=bbox, data=fiber))
 
     fiberprops = [FiberProps(fiber=f, fiber_id=i) for i, f in enumerate(fibers)]
 

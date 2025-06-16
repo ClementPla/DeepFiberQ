@@ -8,10 +8,10 @@ def main():
         page_icon="🧬",
         layout="wide",
     )
-    st.write("# Welcome to DeepFiberQ++! 👋")
+    st.write("# Welcome to DN-AI! 👋")
 
     st.write(
-        "This is a web application for the DeepFiberQ++ project, which aims to provide an easy-to-use interface for analyzing and processing fiber images."
+        "This is a web application for the DN-AI project, which aims to provide an easy-to-use interface for analyzing and processing fiber images."
     )
     st.write("## Features")
     st.write(

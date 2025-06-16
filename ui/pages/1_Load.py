@@ -47,37 +47,80 @@ def build_individual_loader():
     cols = st.columns(2)
     with cols[1]:
         st.markdown(f"<h3 style='color: {st.session_state['color2']};'>Second analog</h3>", unsafe_allow_html=True)
-        cldu_files = st.file_uploader(
-            label="Upload second analog file(s)",
-            accept_multiple_files=True,
-            type=["czi", "jpeg", "jpg", "png", "tiff", "tif"],
-        )
+
+        if (
+            st.session_state.get("analog_2_files", None) is None
+            or len(st.session_state.analog_2_files) == 0
+        ):
+            st.session_state["analog_2_files"] = st.file_uploader(
+                label="Upload second analog file(s)",
+                accept_multiple_files=True,
+                type=["czi", "jpeg", "jpg", "png", "tiff", "tif"],
+            )
+        else:
+            st.session_state["analog_2_files"] += st.file_uploader(
+                label="Upload second analog file(s)",
+                accept_multiple_files=True,
+                type=["czi", "jpeg", "jpg", "png", "tiff", "tif"],
+            )
+        
+        
     with cols[0]:
         st.markdown(f"<h3 style='color: {st.session_state['color1']};'>First analog</h3>", unsafe_allow_html=True)
-        idu_files = st.file_uploader(
-            label="Upload first analog file(s)",
-            accept_multiple_files=True,
-            type=["czi", "jpeg", "jpg", "png", "tiff", "tif"],
-        )
+        if (
+            st.session_state.get("analog_1_files", None) is None
+            or len(st.session_state.analog_1_files) == 0
+        ):
+            st.session_state["analog_1_files"] = st.file_uploader(
+                label="Upload first analog file(s)",
+                accept_multiple_files=True,
+                type=["czi", "jpeg", "jpg", "png", "tiff", "tif"],
+            )
+        else:
+            st.session_state["analog_1_files"] += st.file_uploader(
+                label="Upload first analog file(s)",
+                accept_multiple_files=True,
+                type=["czi", "jpeg", "jpg", "png", "tiff", "tif"],)
     
-    if idu_files is None and cldu_files is None:
+    analog_1_files=st.session_state.get("analog_1_files", None)
+    analog_2_files=st.session_state.get("analog_2_files", None)
+    
+    # Remove duplicates from the list of files. We loop through the files and keep only the first occurrence of each file_id.
+    def remove_duplicates(files):
+        seen_ids = set()
+        unique_files = []
+        for file in files:
+            if file and file.name not in seen_ids:
+                unique_files.append(file)
+                seen_ids.add(file.name)
+        return unique_files
+
+    analog_1_files = remove_duplicates(analog_1_files or [])
+    analog_2_files = remove_duplicates(analog_2_files or [])
+    
+    
+    if analog_1_files is None and analog_2_files is None:
         return 
     else:
-        # Check we have both IdU and CldU files (same number of files)
-        if len(idu_files)>0 and len(cldu_files)>0 and len(idu_files) != len(cldu_files):
-            st.error("Please upload the same number of IdU and CldU files.")
+        if len(analog_1_files)>0 and len(analog_2_files)>0 and len(analog_1_files) != len(analog_2_files):
+            st.error("Please upload the same number of analogs files.")
             return
-    idu_files = sorted(idu_files, key=lambda x: x.name)
-    cldu_files = sorted(cldu_files, key=lambda x: x.name)
-    max_size = max(len(idu_files), len(cldu_files))
-
+    
+    # Always make sure we don't have duplicates in the list of files
+    
+    analog_1_files = sorted(analog_1_files, key=lambda x: x.name)
+    analog_2_files = sorted(analog_2_files, key=lambda x: x.name)
+    max_size = max(len(analog_1_files), len(analog_2_files))
     # Pad the shorter list with None
-    if len(idu_files) < max_size:
-        idu_files += [None] * (max_size - len(idu_files))
-    if len(cldu_files) < max_size:
-        cldu_files += [None] * (max_size - len(cldu_files))
+    if len(analog_1_files) < max_size:
+        analog_1_files += [None] * (max_size - len(analog_1_files))
+    if len(analog_2_files) < max_size:
+        analog_2_files += [None] * (max_size - len(analog_2_files))
 
-    combined_files = list(zip(idu_files, cldu_files))
+    combined_files = list(zip(analog_1_files, analog_2_files))
+
+    
+
     if (
         st.session_state.get("files_uploaded", None) is None
         or len(st.session_state.files_uploaded) == 0
@@ -85,7 +128,28 @@ def build_individual_loader():
         st.session_state["files_uploaded"] = combined_files
     else:
         st.session_state["files_uploaded"] += combined_files
+    
 
+
+    # If any of the files (analog_1_files or analog_2_files) was included previously in the files_uploaded, 
+    # We remove the previous occurence from the files_uploaded list.
+    current_ids = set()
+    for f in analog_1_files + analog_2_files:
+        if f:
+            current_ids.add(f.name)
+
+    # Safely filter the list to exclude any files with matching file_ids
+    def is_not_duplicate(file):
+        if isinstance(file, tuple):
+            f1, f2 = file
+            if f1 and f2:
+                return True
+            
+            return (f1 is None or f1.name not in current_ids) and (f2 is None or f2.name not in current_ids)
+        else:
+            return True
+        
+    st.session_state.files_uploaded = [f for f in st.session_state.files_uploaded if is_not_duplicate(f)]
 
 
 

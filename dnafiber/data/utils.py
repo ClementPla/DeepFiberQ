@@ -4,6 +4,7 @@ from xml.dom import minidom
 import cv2
 import numpy as np
 from czifile import CziFile
+from tifffile import imread
 
 
 def read_svg(svg_path):
@@ -44,37 +45,36 @@ def extract_bboxes(mask):
     return bboxes
 
 
-def preprocess_tiff(raw_data):
+def preprocess(raw_data, reverse_channels=False):
     MAX_VALUE = 2**16 - 1
+    if raw_data.ndim == 2:
+        raw_data = raw_data[np.newaxis, :, :]
     h, w = raw_data.shape[1:3]
     orders = np.arange(raw_data.shape[0])[::-1]  # Reverse channel order
     result = np.zeros((h, w, 3), dtype=np.uint8)
+
     for i, chan in enumerate(raw_data):
         hist, bins = np.histogram(chan.ravel(), MAX_VALUE + 1, (0, MAX_VALUE + 1))
         cdf = hist.cumsum()
         cdf_normalized = cdf / cdf[-1]
         bmax = np.searchsorted(cdf_normalized, 0.99, side="left")
-        clip = np.clip(chan, 0, bmax)
-        result[:, :, orders[i]] = (
-            (clip - clip.min()) / (bmax - clip.min()) * 255
-        ).astype(np.uint8)
+        clip = np.clip(chan, 0, bmax).astype(np.float32)
+        clip =  (clip - clip.min()) / (bmax - clip.min()) * 255
+        result[:, :, orders[i]] = clip
+    if reverse_channels:
+    # Reverse channels 0 and 1
+        result = result[:, :, [1, 0, 2]]
     return result
 
 
-def read_czi(filepath, reverse_channels=False):
+def read_czi(filepath):
     data = CziFile(filepath)
-    image = preprocess_tiff(data.asarray().squeeze())
-    if reverse_channels:
-        # Reverse channels 0 and 1
-        image = image[:, :, [1, 0, 2]]
-    return image
+   
+    return data.asarray().squeeze()
 
 
-def read_tiff(filepath, reverse_channels=False):
-    from tifffile import imread
-    data = imread(filepath)
-    image = preprocess_tiff(data)
-    if reverse_channels:
-        # Reverse channels 0 and 1
-        image = image[:, :, [1, 0, 2]]
-    return image
+def read_tiff(filepath):
+    
+    data = imread(filepath).squeeze()
+
+    return data

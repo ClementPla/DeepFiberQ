@@ -11,7 +11,7 @@ from joblib import Parallel, delayed
 import time
 from catppuccin import PALETTE
 from dnafiber.deployment import _get_model
-
+from dnafiber.ui.inference import ui_inference
 
 def plot_result(seleted_category=None):
     if st.session_state.get("results", None) is None or selected_category is None:
@@ -93,10 +93,18 @@ def plot_result(seleted_category=None):
 
 def run_inference(model_name, pixel_size):
     is_cuda_available = torch.cuda.is_available()
-    model = _get_model(
+    if "ensemble" in model_name:
+        model = [
+            _ + "_finetuned" if "finetuned" in model_name else ""
+            for _ in MODELS_ZOO.values()
+            if _ != "ensemble"
+        ]
+    else:
+        model = _get_model(
         revision=model_name,
         device="cuda" if is_cuda_available else "cpu",
     )
+
     my_bar = st.progress(0, text="Running segmentation...")
     all_files = st.session_state.files_uploaded
     all_results = dict(
@@ -113,11 +121,11 @@ def run_inference(model_name, pixel_size):
             filename = file.name
             image = get_image(file, st.session_state.get("reverse_channels", False), file.file_id)
         start = time.time()
-        prediction = infer(
-            model,
-            image,
-            "cuda" if is_cuda_available else "cpu",
-            scale=pixel_size,
+        prediction = ui_inference(
+            _model=model,
+            _image=image,
+            _device="cuda" if is_cuda_available else "cpu",
+            postprocess=False,
         )
         print(f"Prediction time: {time.time() - start:.2f} seconds for {file.name}")
         h, w = prediction.shape
@@ -194,8 +202,7 @@ if st.session_state.get("files_uploaded", None):
         if run_segmentation:
             run_inference(
             model_name=MODELS_ZOO[model_name] + "_finetuned"
-            if finetuned
-            else MODELS_ZOO[model_name],
+            if finetuned else MODELS_ZOO[model_name],
             pixel_size=st.session_state.get("pixel_size", 0.13),
         )
             st.balloons()

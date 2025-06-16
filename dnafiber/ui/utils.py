@@ -1,11 +1,14 @@
 import PIL.Image
 import streamlit as st
-from dnafiber.data.utils import read_czi, read_tiff
+from dnafiber.data.utils import read_czi, read_tiff, preprocess
 import cv2
 import numpy as np
 import math
 from dnafiber.deployment import _get_model
 import PIL
+from PIL import Image
+import io
+import base64
 
 MAX_WIDTH = 512
 MAX_HEIGHT = 512
@@ -21,12 +24,12 @@ TYPE_MAPPING = {
 }
 
 @st.cache_data
-def get_image(_filepath, reverse_channel, id):
+def load_image(_filepath, id=None):
     filename = str(_filepath.name)
     if filename.endswith(".czi"):
-        return read_czi(_filepath, reverse_channel)
+        return read_czi(_filepath)
     elif filename.endswith(".tif") or filename.endswith(".tiff"):
-        return read_tiff(_filepath, reverse_channel)
+        return read_tiff(_filepath)
     elif (
         filename.endswith(".png")
         or filename.endswith(".jpg")
@@ -38,6 +41,20 @@ def get_image(_filepath, reverse_channel, id):
     else:
         raise NotImplementedError(f"File type {filename} is not supported yet")
 
+
+
+@st.cache_data
+def get_image(_filepath, reverse_channel, id):
+    filename = str(_filepath.name)
+    image = load_image(_filepath, id)
+    if filename.endswith(".czi") or filename.endswith(".tif") or filename.endswith(".tiff"):
+        image = preprocess(image, reverse_channel)
+    image = cv2.normalize(
+        image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
+    )
+    return image
+        
+    
 def get_multifile_image(_filepaths):
     result = None
 
@@ -70,23 +87,33 @@ def get_multifile_image(_filepaths):
 
 
 
+def numpy_to_base64_png(image_array):
+    """
+    Encodes a NumPy image array to a base64 string (PNG format).
 
+    Args:
+        image_array: A NumPy array representing the image.
 
-    # filename = str(_filepath.name)
-    # if filename.endswith(".czi"):
-    #     return read_czi(_filepath, reverse_channel)
-    # elif filename.endswith(".tif") or filename.endswith(".tiff"):
-    #     return read_tiff(_filepath, reverse_channel)
-    # elif (
-    #     filename.endswith(".png")
-    #     or filename.endswith(".jpg")
-    #     or filename.endswith(".jpeg")
-    # ):
-    #     image = PIL.Image.open(_filepath)
-    #     image = np.array(image)
-    #     return image
-    # else:
-    #     raise NotImplementedError(f"File type {filename} is not supported yet")
+    Returns:
+        A base64 string representing the PNG image.
+    """
+    # Convert NumPy array to PIL Image
+    image = Image.fromarray(image_array)
+
+    # Create an in-memory binary stream
+    buffer = io.BytesIO()
+
+    # Save the image to the buffer in PNG format
+    image.save(buffer, format="jpeg")
+
+    # Get the byte data from the buffer
+    png_data = buffer.getvalue()
+
+    # Encode the byte data to base64
+    base64_encoded = base64.b64encode(png_data).decode()
+
+    return f"data:image/jpeg;base64,{base64_encoded}"
+
 
 @st.cache_data
 def get_resized_image(_image, id):

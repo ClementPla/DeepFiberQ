@@ -34,3 +34,5 @@ joblib = "1.4.2"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+[tool.poetry.scripts]
+DNAI = "start:main"

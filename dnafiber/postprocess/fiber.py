@@ -3,10 +3,25 @@ import numpy as np
 from typing import Tuple
 from dnafiber.postprocess.skan import trace_skeleton
 
+@attrs.define
+class Bbox:
+    x: int
+    y: int
+    width: int
+    height: int
+
+    @property
+    def bbox(self) -> Tuple[int, int, int, int]:
+        return (self.x, self.y, self.width, self.height)
+
+    @bbox.setter
+    def bbox(self, value: Tuple[int, int, int, int]):
+        self.x, self.y, self.width, self.height = value
+
 
 @attrs.define
 class Fiber:
-    bbox: Tuple[int, int, int, int]
+    bbox: Bbox
     data: np.ndarray
 
 
@@ -20,7 +35,7 @@ class FiberProps:
 
     @property
     def bbox(self):
-        return self.fiber.bbox
+        return self.fiber.bbox.bbox
 
     @bbox.setter
     def bbox(self, value):
@@ -78,6 +93,18 @@ class FiberProps:
             self.fiber_type == "double"
             or self.fiber_type == "one-two-one"
             or self.fiber_type == "two-one-two"
+        )
+    
+    def scaled_coordinates(self, scale: float) -> Tuple[int, int]:
+        """
+        Scale down the coordinates of the fiber's bounding box.
+        """
+        x, y, width, height = self.bbox
+        return (
+            int(x * scale),
+            int(y * scale),
+            int(width * scale),
+            int(height * scale),
         )
 
 

@@ -53,7 +53,7 @@ def convert_mask_to_image(mask, expand=False):
 
 
 @torch.inference_mode()
-def infer(model, image, device, scale=0.13, to_numpy=True):
+def infer(model, image, device, scale=0.13, to_numpy=True, only_probabilities=False):
     if isinstance(model, str):
         model = _get_model(device=device, revision=model)
     model_pixel_size = 0.26
@@ -61,17 +61,17 @@ def infer(model, image, device, scale=0.13, to_numpy=True):
     scale = scale / model_pixel_size
     tensor = transform(image=image)["image"].unsqueeze(0).to(device)
     h, w = tensor.shape[2], tensor.shape[3]
-
-    with torch.inference_mode():
+    device = torch.device(device)
+    with torch.autocast(device_type=device.type):
         tensor = F.interpolate(
             tensor,
             size=(int(h * scale), int(w * scale)),
             mode="bilinear",
         )
-        if tensor.shape[2] > 2048 or tensor.shape[3] > 2048:
+        if tensor.shape[2] > 1024 or tensor.shape[3] > 1024:
             inferer = SlidingWindowInferer(
-                roi_size=(2048, 2048),
-                sw_batch_size=1,
+                roi_size=(1024, 1024),
+                sw_batch_size=4,
                 overlap=0.25,
                 mode="gaussian",
                 device=device,
@@ -82,6 +82,15 @@ def infer(model, image, device, scale=0.13, to_numpy=True):
             output = model(tensor)
 
         probabilities = F.softmax(output, dim=1)
+        if only_probabilities:
+            probabilities = probabilities.cpu()
+
+            probabilities = F.interpolate(
+                probabilities,
+                size=(h, w),
+                mode="bilinear",
+            )
+            return probabilities
 
         output = F.interpolate(
             probabilities.argmax(dim=1, keepdim=True).float(),

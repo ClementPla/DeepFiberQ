@@ -11,8 +11,6 @@ DN-AI offers different solutions for biologists to measure DNA replication in fl
 - **Batch processing**: DN-AI can process multiple images at once, making it easy to analyze large datasets. It also supports comparing ratios between different batches of images.
 
 
-
-
 ## Installation
 
 DN-AI relies on Python. We recommend installing its latest version (3.10 or higher) and using a virtual environment to avoid conflicts with other packages.
@@ -21,24 +19,25 @@ DN-AI relies on Python. We recommend installing its latest version (3.10 or high
 Before installing DN-AI, make sure you have the following prerequisites installed:
 - [Python 3.10 or higher](https://www.python.org/downloads/) 
 - [pip](https://pip.pypa.io/en/stable/installation/) (Python package installer)
-- [git](https://git-scm.com/downloads) (version control system)
+
+### Python Package
+To install DN-AI as a Python package, you can use pip:
+
+```bash
+pip install git+https://github.com/ClementPla/DeepFiberQ.git
+```
+
 
 ### Graphical User Interface (GUI)
-To install DN-AI with a graphical user interface, you can use the following command from a terminal or command prompt:
+
+To run the DN-AI graphical user interface, you can use the following command:
 
 ```bash
-git clone https://github.com/ClementPla/DeepFiberQ.git
+DNAI
 ```
-Then, navigate to the `DeepFiberQ` directory and run the following command:
 
-```bash
-pip install .
-```
-This will install DN-AI along with all its dependencies. After installation, you can run the GUI by executing:
+Make sure you are running this command in the terminal where you have installed DN-AI. This will start a local web server and you will see output similar to:
 
-```bash
-streamlit run ui/Welcome.py
-```
 
 Then open your web browser and go to `http://localhost:8501` to access the DN-AI interface.
 
@@ -46,12 +45,6 @@ Screenshots of the GUI:
 
 ![DN-AI GUI](imgs/screenshot.png)
 
-### Python Package
-To install DN-AI as a Python package, you can use pip:
-
-```bash
-pip install git+https://github.com/ClementPla/DeepFiberQ/tree/main
-```
 
 
 ### Docker

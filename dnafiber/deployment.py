@@ -37,6 +37,7 @@ def format_results(results: list[FiberProps], pixel_size: float) -> pd.DataFrame
 
 
 MODELS_ZOO = {
+    "Ensemble": "ensemble",
     "SegFormer MiT-B4": "segformer_mit_b4",
     "SegFormer MiT-B2": "segformer_mit_b2",
     "U-Net SE-ResNet50": "unet_se_resnet50",

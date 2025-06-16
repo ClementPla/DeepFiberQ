@@ -8,6 +8,7 @@ from dnafiber.ui.utils import (
     get_resized_image,
     bokeh_imshow,
     pad_image_to_croppable,
+    numpy_to_base64_png,
 )
 from dnafiber.deployment import MODELS_ZOO
 from dnafiber.ui.inference import ui_inference
@@ -24,6 +25,7 @@ import numpy as np
 import torch
 from skimage.segmentation import expand_labels
 from dnafiber.deployment import _get_model
+import pandas as pd
 
 st.set_page_config(layout="wide")
 st.title("Viewer")
@@ -38,25 +40,12 @@ def get_model(model_name):
     return model
 
 
-def start_inference():
-    image = st.session_state.image_inference
-    model = get_model(st.session_state.model)
-    prediction = ui_inference(
-        model,
-        image,
-        "cuda" if torch.cuda.is_available() else "cpu",
-        st.session_state.post_process,
-        st.session_state.image_id,
-    )
-    prediction = [
-        p
-        for p in prediction
-        if (p.fiber_type != "single") and p.fiber_type != "multiple"
-    ]
+@st.cache_resource
+def display_prediction(_prediction, _image, image_id=None):
     max_width = 2048
-    if image.shape[1] > max_width:
-        st.toast("Images are displayed at a lower resolution of 2048 pixel wide")
-
+    image = _image
+    if image.max() > 25:
+        image = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
     scale = 1
     # Resize the image to max_width
     if image.shape[1] > max_width:
@@ -68,33 +57,27 @@ def start_inference():
             fy=scale,
             interpolation=cv2.INTER_LINEAR,
         )
-    for fiber in prediction:
-        fiber.bbox = (
-            int(fiber.bbox[0] * scale),
-            int(fiber.bbox[1] * scale),
-            int(fiber.bbox[2] * scale),
-            int(fiber.bbox[3] * scale),
-        )
-        fiber.data = cv2.resize(
-            expand_labels(fiber.data, 1),
+
+    h, w = image.shape[:2]
+    labels_maps = np.zeros((h, w), dtype=np.uint8)
+    for i, region in enumerate(_prediction):
+        x, y, w, h = region.scaled_coordinates(scale)
+        data = cv2.resize(
+            expand_labels(region.data, 1),
             None,
             fx=scale,
             fy=scale,
             interpolation=cv2.INTER_NEAREST,
         )
-    h, w = image.shape[:2]
-    labels_maps = np.zeros((h, w), dtype=np.uint8)
-    for i, region in enumerate(prediction):
-        h, w = region.data.shape[:2]
         labels_maps[
-            region.bbox[1] : region.bbox[1] + h,
-            region.bbox[0] : region.bbox[0] + w,
-        ] = region.data
+            y : y + data.shape[0],
+            x : x + data.shape[1],
+        ] = data
     p1 = figure(
         width=600,
         x_range=Range1d(-image.shape[1] / 8, image.shape[1] * 1.125, bounds="auto"),
         y_range=Range1d(image.shape[0] * 1.125, -image.shape[0] / 8, bounds="auto"),
-        title=f"Detected fibers: {len(prediction)}",
+        title=f"Detected fibers: {len(_prediction)}",
         tools="pan,wheel_zoom,box_zoom,reset",
         active_scroll="wheel_zoom",
     )
@@ -105,7 +88,9 @@ def start_inference():
         y=0,
         dw=labels_maps.shape[1],
         dh=labels_maps.shape[0],
-        palette=["black", st.session_state["color1"], st.session_state["color2"]] if np.max(labels_maps) > 0 else ["black"],
+        palette=["black", st.session_state["color1"], st.session_state["color2"]]
+        if np.max(labels_maps) > 0
+        else ["black"],
     )
     p2 = figure(
         x_range=p1.x_range,
@@ -117,13 +102,22 @@ def start_inference():
     bokeh_imshow(p2, image)
     colors = [c.hex for c in PALETTE.latte.colors][:14]
     data_source = dict(
-        x=[], y=[], width=[], height=[], color=[], firstAnalog=[], secondAnalog=[], ratio=[]
+        x=[],
+        y=[],
+        width=[],
+        height=[],
+        color=[],
+        firstAnalog=[],
+        secondAnalog=[],
+        ratio=[],
+        fiber_id=[],
     )
     np.random.shuffle(colors)
-    for i, region in enumerate(prediction):
+    for i, region in enumerate(_prediction):
         color = colors[i % len(colors)]
-        x, y, w, h = region.bbox
+        x, y, w, h = region.scaled_coordinates(scale)
 
+        fiberId = region.fiber_id
         data_source["x"].append((x + w / 2))
         data_source["y"].append((y + h / 2))
         data_source["width"].append(w)
@@ -135,6 +129,7 @@ def start_inference():
         data_source["firstAnalog"].append(f"{red_length:.2f} µm")
         data_source["secondAnalog"].append(f"{green_length:.2f} µm")
         data_source["ratio"].append(f"{green_length / red_length:.2f}")
+        data_source["fiber_id"].append(fiberId)
 
     rect1 = p1.rect(
         x="x",
@@ -156,7 +151,7 @@ def start_inference():
     )
 
     hover = HoverTool(
-        tooltips=f'<p style="color:{st.session_state["color1"]};">@firstAnalog</p> <p style="color:{st.session_state["color2"]};">@secondAnalog</p><b> Ratio: @ratio</b>',
+        tooltips=f'<b>Fiber ID: @fiber_id</b><br><p style="color:{st.session_state["color1"]};">@firstAnalog</p> <p style="color:{st.session_state["color2"]};">@secondAnalog</p><b> Ratio: @ratio</b>',
     )
     hover.renderers = [rect1, rect2]
     hover.point_policy = "follow_mouse"
@@ -172,23 +167,147 @@ def start_inference():
         sizing_mode="stretch_width",
         toolbar_options=dict(logo=None, help=None),
     )
-    streamlit_bokeh(fig, use_container_width=True)
+    return fig
+
+
+@st.cache_data
+def show_fibers(_prediction, _image, image_id=None):
+    data = dict(
+        fiber_id=[],
+        firstAnalog=[],
+        secondAnalog=[],
+        ratio=[],
+        fiber_type=[],
+        visualization=[],
+    )
+
+    for fiber in _prediction:
+        data["fiber_id"].append(fiber.fiber_id)
+        r, g = fiber.counts
+        red_length = st.session_state["pixel_size"] * r
+        green_length = st.session_state["pixel_size"] * g
+        data["firstAnalog"].append(f"{red_length:.3f} ")
+        data["secondAnalog"].append(f"{green_length:.3f} ")
+        data["ratio"].append(f"{green_length / red_length:.3f}")
+        data["fiber_type"].append(fiber.fiber_type)
+
+        x, y, w, h = fiber.bbox
+
+        visu = _image[y : y + h, x : x + w, :]
+        visu = cv2.normalize(visu, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+        data["visualization"].append(visu)
+
+    df = pd.DataFrame(data)
+    df = df.rename(
+        columns={
+            "firstAnalog": "First analog (µm)",
+            "secondAnalog": "Second analog (µm)",
+            "ratio": "Ratio",
+            "fiber_type": "Fiber type",
+            "fiber_id": "Fiber ID",
+            "visualization": "Visualization",
+        }
+    )
+    df["Visualization"] = df["Visualization"].apply(lambda x: numpy_to_base64_png(x))
+    return df
+
+
+def start_inference():
+    image = st.session_state.image_inference
+    image = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+
+    if "ensemble" in st.session_state.model:
+        model = [
+            _ + "_finetuned" if "finetuned" in st.session_state.model else ""
+            for _ in MODELS_ZOO.values()
+            if _ != "ensemble"
+        ]
+    else:
+        model = get_model(st.session_state.model)
+    prediction = ui_inference(
+        model,
+        image,
+        "cuda" if torch.cuda.is_available() else "cpu",
+        st.session_state.post_process,
+        st.session_state.image_id,
+    )
+    prediction = [
+        p
+        for p in prediction
+        if (p.fiber_type != "single") and p.fiber_type != "multiple"
+    ]
+    tab_viewer, tab_fibers = st.tabs(["Viewer", "Fibers"])
+
+    with tab_fibers:
+        df = show_fibers(prediction, image, st.session_state.image_id)
+
+        event = st.dataframe(
+            df,
+            on_select="rerun",
+            selection_mode="multi-row",
+            use_container_width=True,
+            column_config={
+                "Visualization": st.column_config.ImageColumn(
+                    "Visualization",
+                    help="Visualization of the fiber",
+                )
+            },
+        )
+
+        rows = event["selection"]["rows"]
+        columns = df.columns[:-2]
+        df = df.iloc[rows][columns]
+
+        cols = st.columns(3)
+        with cols[0]:
+            copy_to_clipboard = st.button(
+                "Copy selected fibers to clipboard",
+                help="Copy the selected fibers to clipboard in CSV format.",
+            )
+            if copy_to_clipboard:
+                df.to_clipboard(index=False)
+        with cols[2]:
+            st.download_button(
+                "Download selected fibers",
+                data=df.to_csv(index=False).encode("utf-8"),
+                file_name=f"fibers_{st.session_state.image_id}.csv",
+                mime="text/csv",
+            )
+
+    with tab_viewer:
+        max_width = 2048
+        if image.shape[1] > max_width:
+            st.toast("Images are displayed at a lower resolution of 2048 pixel wide")
+
+        fig = display_prediction(prediction, image, st.session_state.image_id)
+        streamlit_bokeh(fig, use_container_width=True)
 
 
 def on_session_start():
-    can_start = st.session_state.get("files_uploaded", None) is not None and len(st.session_state.files_uploaded) > 0
+    can_start = (
+        st.session_state.get("files_uploaded", None) is not None
+        and len(st.session_state.files_uploaded) > 0
+    )
 
     if can_start:
         return can_start
-    
-    cldu_exists = st.session_state.get("files_uploaded_cldu", None) is not None and len(st.session_state.files_uploaded_cldu) > 0
-    idu_exists = st.session_state.get("files_uploaded_idu", None) is not None and len(st.session_state.files_uploaded_idu) > 0
+
+    cldu_exists = (
+        st.session_state.get("files_uploaded_cldu", None) is not None
+        and len(st.session_state.files_uploaded_cldu) > 0
+    )
+    idu_exists = (
+        st.session_state.get("files_uploaded_idu", None) is not None
+        and len(st.session_state.files_uploaded_idu) > 0
+    )
 
     if cldu_exists and idu_exists:
-        
-        if len(st.session_state.get("files_uploaded_cldu")) != len(st.session_state.get("files_uploaded_idu")):
+        if len(st.session_state.get("files_uploaded_cldu")) != len(
+            st.session_state.get("files_uploaded_idu")
+        ):
             st.error("Please upload the same number of CldU and IdU files.")
             return False
+
 
 def create_display_files(files):
     if files is None or len(files) == 0:
@@ -207,26 +326,37 @@ def create_display_files(files):
             display_files.append(file.name)
     return display_files
 
+
 if on_session_start():
     files = st.session_state.files_uploaded
     displayed_names = create_display_files(files)
-    selected_file = st.selectbox("Pick an image", displayed_names, index=0, help="Select an image to view and analyze.")
-    
+    selected_file = st.selectbox(
+        "Pick an image",
+        displayed_names,
+        index=0,
+        help="Select an image to view and analyze.",
+    )
+
     # Find index of the selected file
     index = displayed_names.index(selected_file)
     file = files[index]
     if isinstance(file, tuple):
         file_id = file[0].file_id if file[0] is not None else file[1].file_id
-        if file[0] is None or file:
+        if file[0] is None or file[1] is None:
             missing = "First analog" if file[0] is None else "Second analog"
-            st.warning("In this image, {missing} channel is missing. We assume the intended goal is to segment the DNA fibers without differentiation. \
-                       Note the model may still predict two classes and try to compute a ratio; these informations can be ignored.")
+            st.warning(
+                f"In this image, {missing} channel is missing. We assume the intended goal is to segment the DNA fibers without differentiation. \
+                       Note the model may still predict two classes and try to compute a ratio; these informations can be ignored."
+            )
         image = get_multifile_image(file)
     else:
         file_id = file.file_id
-        image = get_image(file, reverse_channel=st.session_state.get("reverse_channels", False),  id=file_id)
+        image = get_image(
+            file,
+            reverse_channel=st.session_state.get("reverse_channels", False),
+            id=file_id,
+        )
     h, w = image.shape[:2]
-
     with st.sidebar:
         st.metric(
             "Pixel size (µm)",
@@ -311,11 +441,9 @@ if on_session_start():
             which_x -= 1
             x1 = math.floor(which_x * by / scale_w)
             x2 = math.floor((which_x + 1) * by / scale_w)
-        
+
         st.session_state["which_x"] = which_x
         st.session_state["which_y"] = which_y
-        
-
 
         # Draw a grid on the thumbnail
         for i in range(0, small_h, int(bx // scale_h)):
@@ -353,7 +481,13 @@ if on_session_start():
 
     st.session_state.image_inference = image
     st.session_state.image_id = (
-        file_id + str(which_x) + str(which_y) + str(bx) + str(by)
+        file_id
+        + str(which_x)
+        + str(which_y)
+        + str(bx)
+        + str(by)
+        + str(model_name)
+        + ("_finetuned" if finetuned else "")
     )
     col1, col2, col3 = st.columns([1, 1, 1])
     start_inference()

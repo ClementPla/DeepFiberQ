@@ -6,7 +6,7 @@ def main():
     # Start the Streamlit application
     print("Starting Streamlit application...")
     local_dir = os.path.dirname(os.path.abspath(__file__))
-    subprocess.Popen(
+    subprocess.run(
         [
             "streamlit",
             "run",

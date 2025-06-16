@@ -10,7 +10,7 @@ def main():
         [
             "streamlit",
             "run",
-            os.path.join(local_dir, "..", "ui", "Welcome.py"),
+            os.path.join(local_dir, "ui", "Welcome.py"),
             "--server.maxUploadSize",
             "1024",
         ],

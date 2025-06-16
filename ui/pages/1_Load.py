@@ -2,7 +2,7 @@ import streamlit as st
 
 
 st.set_page_config(
-    page_title="DeepFiberQ++",
+    page_title="DN-AI",
     page_icon=":microscope:",
     layout="wide",
 )

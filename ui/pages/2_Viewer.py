@@ -27,7 +27,9 @@ from skimage.segmentation import expand_labels
 from dnafiber.deployment import _get_model
 import pandas as pd
 
-st.set_page_config(layout="wide")
+st.set_page_config(layout="wide",
+                   page_icon=":microscope:",
+)
 st.title("Viewer")
 
 

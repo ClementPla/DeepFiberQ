@@ -3,7 +3,7 @@ import streamlit as st
 
 st.set_page_config(
     page_title="DN-AI",
-    page_icon=":microscope:",
+    page_icon="🔬",
     layout="wide",
 )
 

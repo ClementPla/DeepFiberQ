@@ -11,7 +11,7 @@ from dnafiber.ui.utils import (
     numpy_to_base64_png,
 )
 from dnafiber.deployment import MODELS_ZOO
-from dnafiber.ui.inference import ui_inference
+from dnafiber.ui.inference import ui_inference, get_model
 from skimage.util import view_as_blocks
 import cv2
 import math
@@ -24,22 +24,13 @@ from catppuccin import PALETTE
 import numpy as np
 import torch
 from skimage.segmentation import expand_labels
-from dnafiber.deployment import _get_model
 import pandas as pd
 
-st.set_page_config(layout="wide",
-                   page_icon=":microscope:",
+st.set_page_config(
+    layout="wide",
+    page_icon=":microscope:",
 )
 st.title("Viewer")
-
-
-@st.cache_resource
-def get_model(model_name):
-    model = _get_model(
-        device="cuda" if torch.cuda.is_available() else "cpu",
-        revision=model_name,
-    )
-    return model
 
 
 @st.cache_resource

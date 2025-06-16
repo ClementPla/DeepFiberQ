@@ -1,5 +1,4 @@
 import streamlit as st
-from dnafiber.inference import infer
 import torch
 from dnafiber.ui.utils import get_image, get_multifile_image
 from dnafiber.deployment import MODELS_ZOO
@@ -11,7 +10,8 @@ from joblib import Parallel, delayed
 import time
 from catppuccin import PALETTE
 from dnafiber.deployment import _get_model
-from dnafiber.ui.inference import ui_inference
+from dnafiber.ui.inference import ui_inference_cacheless
+
 
 def plot_result(seleted_category=None):
     if st.session_state.get("results", None) is None or selected_category is None:
@@ -101,14 +101,19 @@ def run_inference(model_name, pixel_size):
         ]
     else:
         model = _get_model(
-        revision=model_name,
-        device="cuda" if is_cuda_available else "cpu",
-    )
+            revision=model_name,
+            device="cuda" if is_cuda_available else "cpu",
+        )
 
     my_bar = st.progress(0, text="Running segmentation...")
     all_files = st.session_state.files_uploaded
     all_results = dict(
-        FirstAnalog=[], SecondAnalog=[], length=[], ratio=[], image_name=[], fiber_type=[]
+        FirstAnalog=[],
+        SecondAnalog=[],
+        length=[],
+        ratio=[],
+        image_name=[],
+        fiber_type=[],
     )
     for i, file in enumerate(all_files):
         if isinstance(file, tuple):
@@ -119,9 +124,11 @@ def run_inference(model_name, pixel_size):
             image = get_multifile_image(file)
         else:
             filename = file.name
-            image = get_image(file, st.session_state.get("reverse_channels", False), file.file_id)
+            image = get_image(
+                file, st.session_state.get("reverse_channels", False), file.file_id
+            )
         start = time.time()
-        prediction = ui_inference(
+        prediction = ui_inference_cacheless(
             _model=model,
             _image=image,
             _device="cuda" if is_cuda_available else "cpu",
@@ -149,7 +156,9 @@ def run_inference(model_name, pixel_size):
         print(f"Refinement time: {time.time() - start:.2f} seconds for {filename}")
         results = [fiber for fiber in results if fiber.is_valid]
         all_results["FirstAnalog"].extend([fiber.red * pixel_size for fiber in results])
-        all_results["SecondAnalog"].extend([fiber.green * pixel_size for fiber in results])
+        all_results["SecondAnalog"].extend(
+            [fiber.green * pixel_size for fiber in results]
+        )
         all_results["length"].extend(
             [fiber.red * pixel_size + fiber.green * pixel_size for fiber in results]
         )
@@ -168,12 +177,11 @@ if st.session_state.get("files_uploaded", None):
     run_segmentation = st.button("Run Segmentation", use_container_width=True)
 
     with st.sidebar:
-
         st.metric(
             "Pixel size (µm)",
             st.session_state.get("pixel_size", 0.13),
         )
-       
+
         with st.expander("Model", expanded=True):
             model_name = st.selectbox(
                 "Select a model",
@@ -196,22 +204,22 @@ if st.session_state.get("files_uploaded", None):
                 )
 
     tab_segmentation, tab_charts = st.tabs(["Segmentation", "Charts"])
-        
+
     with tab_segmentation:
         st.subheader("Segmentation")
         if run_segmentation:
             run_inference(
-            model_name=MODELS_ZOO[model_name] + "_finetuned"
-            if finetuned else MODELS_ZOO[model_name],
-            pixel_size=st.session_state.get("pixel_size", 0.13),
-        )
+                model_name=MODELS_ZOO[model_name] + "_finetuned"
+                if finetuned
+                else MODELS_ZOO[model_name],
+                pixel_size=st.session_state.get("pixel_size", 0.13),
+            )
             st.balloons()
         if st.session_state.get("results", None) is not None:
-                
             st.write(
                 st.session_state.results,
             )
-            
+
             st.download_button(
                 label="Download results",
                 data=st.session_state.results.to_csv(index=False).encode("utf-8"),

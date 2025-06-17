@@ -156,8 +156,7 @@ def run_inference(model_name, pixel_size):
         #     results = [x for xs in results for x in xs]
 
         # else:
-        results = refine_segmentation(prediction, fix_junctions=True)
-
+        results = refine_segmentation(prediction, fix_junctions=True, show=False)
         print(f"Refinement time: {time.time() - start:.2f} seconds for {filename}")
         results = [fiber for fiber in results if fiber.is_valid]
         all_results["FirstAnalog"].extend([fiber.red * pixel_size for fiber in results])

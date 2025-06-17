@@ -89,10 +89,17 @@ class FiberProps:
 
     @property
     def is_valid(self):
+
+        try:
+            fiber_type = self.fiber_type
+        except IndexError:
+            # Happens if there is no pixel remaining for this fiber, which indicates it is invalid.
+            return False
+        
         return (
-            self.fiber_type == "double"
-            or self.fiber_type == "one-two-one"
-            or self.fiber_type == "two-one-two"
+            fiber_type == "double"
+            or fiber_type == "one-two-one"
+            or fiber_type == "two-one-two"
         )
     
     def scaled_coordinates(self, scale: float) -> Tuple[int, int]:

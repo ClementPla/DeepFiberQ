@@ -1,7 +1,6 @@
 from lightning import LightningModule
 import segmentation_models_pytorch as smp
 from monai.losses.dice import GeneralizedDiceLoss
-from monai.losses.cldice import SoftDiceclDiceLoss
 from torchmetrics.classification import Dice, JaccardIndex
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
@@ -11,6 +10,17 @@ from huggingface_hub import PyTorchModelHubMixin
 import torch
 import torchvision
 from dnafiber.metric import DNAFIBERMetric
+from dnafiber.model.steered_cnn import DNAFiberSteeredCNN
+from skimage.measure import label
+
+
+def _convert_activations(module, from_activation, to_activation):
+    """Recursively convert activation functions in a module"""
+    for name, child in module.named_children():
+        if isinstance(child, from_activation):
+            setattr(module, name, to_activation)
+        else:
+            _convert_activations(child, from_activation, to_activation)
 
 
 class Trainee(LightningModule, PyTorchModelHubMixin):
@@ -24,6 +34,8 @@ class Trainee(LightningModule, PyTorchModelHubMixin):
             or self.model_config["arch"] == "maskrcnn"
         ):
             self.model = None
+        elif self.model_config["arch"] == "steered_cnn":
+            self.model = DNAFiberSteeredCNN(**self.model_config)
         else:
             self.model = smp.create_model(classes=3, **self.model_config, dropout=0.2)
         self.loss = GeneralizedDiceLoss(to_onehot_y=False, softmax=False)
@@ -58,6 +70,7 @@ class Trainee(LightningModule, PyTorchModelHubMixin):
 
     def get_loss(self, y_hat, y):
         y_hat = F.softmax(y_hat, dim=1)
+
         y = F.one_hot(y.long(), num_classes=3)
         y = y.permute(0, 3, 1, 2).float()
         loss = self.loss(y_hat, y)
@@ -91,6 +104,17 @@ class Trainee(LightningModule, PyTorchModelHubMixin):
             "interval": "epoch",
         }
         return [optimizer], [scheduler]
+
+    def get_fiber_probability(self, probas: torch.Tensor):
+        pos_pred = 1 - probas[:, 0, :, :]
+        preds = pos_pred > 1 / 2
+        binary = preds.long().detach().cpu()
+        labelmap = torch.zeros_like(binary, dtype=torch.long)
+        for i, p in enumerate(binary):
+            labelmap[p] = torch.from_numpy(label(p.numpy(), connectivity=2))
+        labelmap = labelmap.to(probas.device)
+
+        return labelmap, pos_pred
 
 
 class TraineeMaskRCNN(Trainee):

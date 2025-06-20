@@ -57,6 +57,12 @@ class DNAFIBERMetric(Metric):
             dist_reduce_fx="sum",
         )
 
+        self.add_state(
+            "N_predicted",
+            default=torch.tensor(0, dtype=torch.int64),
+            dist_reduce_fx="sum",
+        )
+
     def update(self, preds, target):
         if preds.ndim == 4:
             preds = preds.argmax(dim=1)
@@ -76,6 +82,7 @@ class DNAFIBERMetric(Metric):
             preds_labels.append(torch.from_numpy(pred_labels).to(preds.device))
             target_labels.append(torch.from_numpy(target_labels_np).to(preds.device))
             N_true_labels += target_labels_np.max()
+            self.N_predicted += pred_labels.max()
 
         preds_labels = torch.stack(preds_labels)
         target_labels = torch.stack(target_labels)
@@ -117,7 +124,7 @@ class DNAFIBERMetric(Metric):
                     self.fiber_green_recall += recalls[2]
 
                     # Specificity
-                    specificity = F.precision(
+                    precision = F.precision(
                         pred_fiber,
                         gt_fiber,
                         num_classes=3,
@@ -125,9 +132,9 @@ class DNAFIBERMetric(Metric):
                         task="multiclass",
                         average=None,
                     )
-                    specificity = torch.nan_to_num(specificity, nan=0.0)
-                    self.fiber_red_precision += specificity[1]
-                    self.fiber_green_precision += specificity[2]
+                    precision = torch.nan_to_num(precision, nan=0.0)
+                    self.fiber_red_precision += precision[1]
+                    self.fiber_green_precision += precision[2]
 
                 else:
                     self.detection_fp += 1
@@ -147,4 +154,6 @@ class DNAFIBERMetric(Metric):
             / (self.detection_tp + 1e-7),
             "fiber_green_precision": self.fiber_green_precision
             / (self.detection_tp + 1e-7),
+            "total_real_fibers": self.N.item(),
+            "total_predicted_fibers": self.N_predicted.item(),
         }

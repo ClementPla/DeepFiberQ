@@ -10,6 +10,26 @@ from skimage.morphology import skeletonize, dilation
 from skimage.segmentation import expand_labels
 import torch
 from nntools.dataset.composer import CacheBullet
+from skimage.filters import sato
+import cv2
+
+
+@D.nntools_wrapper
+def to_polar_space(image, mask):
+    polar_image = cv2.linearPolar(
+        image,
+        center=(image.shape[1] // 2, image.shape[0] // 2),
+        maxRadius=image.shape[0] // 2,
+        flags=cv2.WARP_FILL_OUTLIERS | cv2.INTER_LINEAR,
+    )
+
+    polar_mask = cv2.linearPolar(
+        mask,
+        center=(mask.shape[1] // 2, mask.shape[0] // 2),
+        maxRadius=mask.shape[0] // 2,
+        flags=cv2.WARP_FILL_OUTLIERS | cv2.INTER_NEAREST,
+    )
+    return {"image": polar_image, "mask": polar_mask}
 
 
 @D.nntools_wrapper
@@ -21,7 +41,26 @@ def convert_mask(mask):
     skeleton = skeletonize(binary_mask) * output
     output = expand_labels(skeleton, 3)
     output = np.clip(output, 0, 2)
+    output = output.astype(np.uint8)
     return {"mask": output}
+
+
+@D.nntools_wrapper
+def sato_filter(image):
+    red_channel = image[:, :, 0]
+    green_channel = image[:, :, 1]
+    sigmas = np.arange(1, 2, 0.5)
+    red_channel = sato(red_channel, black_ridges=False, sigmas=sigmas).astype(np.uint8)
+    green_channel = sato(green_channel, black_ridges=False, sigmas=sigmas).astype(
+        np.uint8
+    )
+
+    image = np.stack(
+        [red_channel, green_channel, np.zeros_like(green_channel)], axis=-1
+    )
+    return {
+        "image": image,
+    }
 
 
 @D.nntools_wrapper
@@ -59,6 +98,8 @@ class FiberDatamodule(LightningDataModule):
         batch_size=32,
         num_workers=8,
         use_bbox=False,
+        sato_filter=False,
+        polar_space=False,
         **kwargs,
     ):
         self.shape = shape
@@ -68,6 +109,8 @@ class FiberDatamodule(LightningDataModule):
         self.num_workers = num_workers
         self.kwargs = kwargs
         self.use_bbox = use_bbox
+        self.sato_filter = sato_filter
+        self.polar_space = polar_space
 
         super().__init__()
 
@@ -141,8 +184,8 @@ class FiberDatamodule(LightningDataModule):
                 + [
                     A.HorizontalFlip(),
                     A.VerticalFlip(),
-                    A.Affine(),
-                    A.ElasticTransform(),
+                    A.Affine(scale=(0.8, 1.2), rotate=(-45, 45), p=0.5),
+                    A.ElasticTransform(alpha=1.5),
                     A.RandomRotate90(),
                     A.OneOf(
                         [
@@ -171,20 +214,24 @@ class FiberDatamodule(LightningDataModule):
         ]
 
     def cast_operators(self):
-        return [
-            A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
-            if not self.use_bbox
-            else A.Normalize(
-                mean=(
-                    0.0,
-                    0.0,
-                    0.0,
+        return (
+            ([sato_filter] if self.sato_filter else [])
+            + ([to_polar_space] if self.polar_space else [])
+            + [
+                A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
+                if not self.use_bbox
+                else A.Normalize(
+                    mean=(
+                        0.0,
+                        0.0,
+                        0.0,
+                    ),
+                    std=(1.0, 1.0, 1.0),
+                    max_pixel_value=255,
                 ),
-                std=(1.0, 1.0, 1.0),
-                max_pixel_value=255,
-            ),
-            ToTensorV2(),
-        ]
+                ToTensorV2(),
+            ]
+        )
 
     def train_dataloader(self):
         if self.use_bbox:

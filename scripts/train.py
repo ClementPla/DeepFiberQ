@@ -73,7 +73,7 @@ def train(arch, encoder):
     #     "checkpoints/DeepFiberQ++ Combined-Finetuned/dauntless-dragon-7/epoch=699-step=8400.ckpt"
     # )
 
-    upload_to_hub(trainee, arch, encoder)
+    # upload_to_hub(trainee, arch, encoder)
 
 
 @rank_zero_only

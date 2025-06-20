@@ -219,25 +219,7 @@ def refine_segmentation(segmentation, fix_junctions=True, show=False):
         local_junctions = np.where(local_junctions)
         local_junctions = np.array(local_junctions).transpose()
         junctions.append(local_junctions)
-    if show:
-        for bbox, junction in zip(coordinates, junctions):
-            x, y, w, h = bbox
-            junction_to_global = np.array(junction) + np.array([y, x])
-
-            plt.scatter(
-                junction_to_global[:, 1],
-                junction_to_global[:, 0],
-                color="white",
-                s=30,
-                alpha=0.35,
-            )
-
-        plt.imshow(skeleton_gt, cmap=cmlabel, interpolation="nearest")
-        plt.axis("off")
-        plt.xticks([])
-        plt.yticks([])
-        plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
-        plt.show()
+    
 
     fibers = []
     if fix_junctions:

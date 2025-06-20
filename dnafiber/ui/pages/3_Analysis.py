@@ -137,22 +137,26 @@ def run_inference(model_name, pixel_size):
         print(f"Prediction time: {time.time() - start:.2f} seconds for {file.name}")
         h, w = prediction.shape
         start = time.time()
-        if h > 2048 or w > 2048:
-            # Extract blocks from the prediction
-            blocks = F.unfold(
-                torch.from_numpy(prediction).unsqueeze(0).float(),
-                kernel_size=(4096, 4096),
-                stride=(4096, 4096),
-            )
-            blocks = blocks.view(4096, 4096, -1).permute(2, 0, 1).byte().numpy()
-            results = Parallel(n_jobs=4)(
-                delayed(refine_segmentation)(block) for block in blocks
-            )
-            results = [x for xs in results for x in xs]
+        # if h > 4096 or w > 4096:
+        #     # Extract blocks from the prediction
 
-        else:
-            results = refine_segmentation(prediction, fix_junctions=True)
+            
+        #     h, w = prediction.shape
+        #     kernel_size = (min(h, 4096), min(w, 4096))
+        #     stride = kernel_size
+        #     blocks = F.unfold(
+        #         torch.from_numpy(prediction).unsqueeze(0).float(),
+        #         kernel_size=kernel_size,
+        #         stride=stride,
+        #     )
+        #     blocks = blocks.view(kernel_size[0], kernel_size[1], -1).permute(2, 0, 1).byte().numpy()
+        #     results = Parallel(n_jobs=4)(
+        #         delayed(refine_segmentation)(block) for block in blocks
+        #     )
+        #     results = [x for xs in results for x in xs]
 
+        # else:
+        results = refine_segmentation(prediction, fix_junctions=True, show=False)
         print(f"Refinement time: {time.time() - start:.2f} seconds for {filename}")
         results = [fiber for fiber in results if fiber.is_valid]
         all_results["FirstAnalog"].extend([fiber.red * pixel_size for fiber in results])

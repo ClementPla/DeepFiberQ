@@ -32,9 +32,9 @@ def ui_inference_cacheless(_model, _image, _device, postprocess=True, id=None):
         if isinstance(_model, list):
             output = None
             for model in _model:
-                if isinstance(model, str):
-                    model = get_model(model)
                 with st.spinner(text="Segmenting with model: {}".format(model)):
+                    if isinstance(model, str):
+                        model = get_model(model)
                     if output is None:
                         output = infer(
                             model,

@@ -1,6 +1,6 @@
 import streamlit as st
 import torch
-from dnafiber.ui.utils import get_image, get_multifile_image
+from dnafiber.ui.utils import get_multifile_image, get_image_cacheless
 from dnafiber.deployment import MODELS_ZOO
 import pandas as pd
 import plotly.express as px
@@ -11,9 +11,10 @@ import time
 from catppuccin import PALETTE
 from dnafiber.deployment import _get_model
 from dnafiber.ui.inference import ui_inference_cacheless
+from dnafiber.ui.components import show_fibers, table_components
 
 
-def plot_result(seleted_category=None):
+def plot_result(seleted_category):
     if st.session_state.get("results", None) is None or selected_category is None:
         return
     only_bilateral = st.checkbox(
@@ -40,13 +41,12 @@ def plot_result(seleted_category=None):
         )
     df = st.session_state.results.copy()
 
-    clean_df = df[["ratio", "image_name", "fiber_type"]].copy()
+    clean_df = df[["Ratio", "image_name", "Fiber type"]].copy()
+    clean_df["Ratio"] = clean_df["Ratio"].astype(float)
     clean_df["Image"] = clean_df["image_name"]
-    clean_df["Fiber Type"] = clean_df["fiber_type"]
-    clean_df["Ratio"] = clean_df["ratio"]
 
     if only_bilateral:
-        clean_df = clean_df[clean_df["Fiber Type"] == "double"]
+        clean_df = clean_df[clean_df["Fiber type"] == "double"]
     if remove_outliers:
         clean_df = clean_df[
             (clean_df["Ratio"] >= min_ratio) & (clean_df["Ratio"] <= max_ratio)
@@ -107,14 +107,7 @@ def run_inference(model_name, pixel_size):
 
     my_bar = st.progress(0, text="Running segmentation...")
     all_files = st.session_state.files_uploaded
-    all_results = dict(
-        FirstAnalog=[],
-        SecondAnalog=[],
-        length=[],
-        ratio=[],
-        image_name=[],
-        fiber_type=[],
-    )
+    all_results = []
     for i, file in enumerate(all_files):
         if isinstance(file, tuple):
             if file[0] is None:
@@ -124,7 +117,7 @@ def run_inference(model_name, pixel_size):
             image = get_multifile_image(file)
         else:
             filename = file.name
-            image = get_image(
+            image = get_image_cacheless(
                 file, st.session_state.get("reverse_channels", False), file.file_id
             )
         start = time.time()
@@ -133,48 +126,61 @@ def run_inference(model_name, pixel_size):
             _image=image,
             _device="cuda" if is_cuda_available else "cpu",
             postprocess=False,
+            only_segmentation=True,
         )
         print(f"Prediction time: {time.time() - start:.2f} seconds for {file.name}")
         h, w = prediction.shape
         start = time.time()
-        # if h > 4096 or w > 4096:
-        #     # Extract blocks from the prediction
+        y_size, x_size = 8192, 8192
+        if h > y_size or w > x_size:
+            # Extract blocks from the prediction
 
+            blocks = [
+                (image[y:y+y_size, x: x+x_size], prediction[y : y + y_size, x : x + x_size], y, x)
+                for y in range(0, h, y_size)
+                for x in range(0, w, x_size)
+            ]
             
-        #     h, w = prediction.shape
-        #     kernel_size = (min(h, 4096), min(w, 4096))
-        #     stride = kernel_size
-        #     blocks = F.unfold(
-        #         torch.from_numpy(prediction).unsqueeze(0).float(),
-        #         kernel_size=kernel_size,
-        #         stride=stride,
-        #     )
-        #     blocks = blocks.view(kernel_size[0], kernel_size[1], -1).permute(2, 0, 1).byte().numpy()
-        #     results = Parallel(n_jobs=4)(
-        #         delayed(refine_segmentation)(block) for block in blocks
-        #     )
-        #     results = [x for xs in results for x in xs]
 
-        # else:
-        results = refine_segmentation(prediction, fix_junctions=True, show=False)
+            parallel_results = Parallel(n_jobs=4, verbose=10)(
+                delayed(refine_segmentation)(
+                    block_img,
+                    block,
+                    True,
+                    st.session_state.get("elongation_threshold", 2),
+                    x,
+                    y,
+                )
+                for (block_img, block, y, x) in (
+                    blocks
+                )
+            )
+
+            results = [
+                fiber for block_result in parallel_results for fiber in block_result
+            ]
+        else:
+            results = refine_segmentation(
+                image,
+                prediction,
+                post_process=True,
+                threshold=st.session_state.get("elongation_threshold", 50),
+            )
         print(f"Refinement time: {time.time() - start:.2f} seconds for {filename}")
         results = [fiber for fiber in results if fiber.is_valid]
-        all_results["FirstAnalog"].extend([fiber.red * pixel_size for fiber in results])
-        all_results["SecondAnalog"].extend(
-            [fiber.green * pixel_size for fiber in results]
-        )
-        all_results["length"].extend(
-            [fiber.red * pixel_size + fiber.green * pixel_size for fiber in results]
-        )
-        all_results["ratio"].extend([fiber.ratio for fiber in results])
-        all_results["image_name"].extend([filename.split("-")[0] for fiber in results])
-        all_results["fiber_type"].extend([fiber.fiber_type for fiber in results])
-
+        df = show_fibers(results, image, image_id=None)
+        df["image_name"] = filename
+        all_results.append(df)
         my_bar.progress(i / len(all_files), text=f"{filename} done")
 
-    st.session_state.results = pd.DataFrame.from_dict(all_results)
+    # Create a dictionary to store the results by concatenating the results
+    results_dict = {k: [] for k in all_results[0].keys()}
+    for result in all_results:
+        for k, v in result.items():
+            results_dict[k].extend(v)
 
     my_bar.empty()
+    st.session_state.results = pd.DataFrame(results_dict)
 
 
 if st.session_state.get("files_uploaded", None):
@@ -212,6 +218,7 @@ if st.session_state.get("files_uploaded", None):
     with tab_segmentation:
         st.subheader("Segmentation")
         if run_segmentation:
+            st.session_state.image_id = None
             run_inference(
                 model_name=MODELS_ZOO[model_name] + "_finetuned"
                 if finetuned
@@ -220,17 +227,8 @@ if st.session_state.get("files_uploaded", None):
             )
             st.balloons()
         if st.session_state.get("results", None) is not None:
-            st.write(
-                st.session_state.results,
-            )
+            table_components(st.session_state.results)
 
-            st.download_button(
-                label="Download results",
-                data=st.session_state.results.to_csv(index=False).encode("utf-8"),
-                file_name="results.csv",
-                mime="text/csv",
-                use_container_width=True,
-            )
     with tab_charts:
         if st.session_state.get("results", None) is not None:
             results = st.session_state.results

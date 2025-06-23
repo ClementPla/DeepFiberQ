@@ -121,7 +121,10 @@ def estimate_fiber_category(fiber: np.ndarray) -> str:
     """
     coordinates = trace_skeleton(fiber > 0)
     coordinates = np.asarray(coordinates)
-    values = fiber[coordinates[:, 0], coordinates[:, 1]]
+    try:
+        values = fiber[coordinates[:, 0], coordinates[:, 1]]
+    except IndexError:
+        return "unknown"
     diff = np.diff(values)
     jump = np.sum(diff != 0)
     n_ccs = jump + 1

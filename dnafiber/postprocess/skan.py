@@ -5,7 +5,10 @@ import itertools
 from numba import njit, int64
 from numba.typed import List
 from numba.types import Tuple
+import math
+from skimage.filters import threshold_otsu
 
+import numba
 # Define the element type: a tuple of two int64
 tuple_type = Tuple((int64, int64))
 
@@ -40,23 +43,37 @@ def find_neighbours(fibers_map, point):
     return neighbors
 
 
-def compute_points_angle(fibers_map, points, steps=25):
+def compute_points_angle(fibers_map, points, steps=25, oriented=False):
     """
     For each endpoint, follow the fiber for a given number of steps and estimate the tangent line by
     fitting a line to the visited points. The angle of the line is returned.
     """
+    binary_map = fibers_map > 0
     points_angle = np.zeros((len(points),), dtype=np.float32)
     for i, point in enumerate(points):
         # Find the fiber it belongs to
         # Lets navigate along the fiber starting from the point during steps pixels.
         # We compute the angles at each step and return the mean angle.
         visited = trace_from_point(
-            fibers_map > 0, (point[0], point[1]), max_length=steps
+            binary_map, (point[0], point[1]), max_length=steps
         )
         visited = np.array(visited)
         vx, vy, x, y = cv2.fitLine(visited[:, ::-1], cv2.DIST_L2, 0, 0.01, 0.01)
         # Compute the angle of the line
-        points_angle[i] = np.arctan(vy / vx)
+        if oriented:
+            # Make sure the the vector points out of the point
+            # We want the vector to point out of the point, so we check the mean position
+            # of the visited points and compare it with the point.
+
+            # If the mean position is to the right of the point, we invert the x component
+            # If the mean position is below the point, we invert the y component
+            mean_x = np.mean(visited[:, 1])
+            if mean_x > point[1]:
+                points_angle[i] = np.arctan2(vy, vx) - np.pi
+            else:
+                points_angle[i] = np.arctan2(vy,  vx)
+        else:
+            points_angle[i] = np.arctan(vy / vx)
 
     return points_angle
 
@@ -173,6 +190,8 @@ def find_endpoints(skel):
                         count += 1
                 if count == 1:
                     endpoints.append((y, x))
+    
+
     return endpoints
 
 
@@ -209,3 +228,131 @@ def trace_from_point(skel, point, max_length=25):
             if skel[ny, nx] == 1 and not visited[ny, nx]:
                 stack.append((ny, nx))
     return path
+
+
+@njit(locals={'difference': numba.float32})
+def follow_along_direction_until_change(start_point, start_color, angle, image, threshold, max_length=25):
+
+    """
+    Follow the fiber along the direction of the start point until the color changes significantly.
+    Returns the maximum step.
+    """
+    # Convert start_point to a tuple of integers to ensure type compatibility
+    start_point = (int(start_point[0]), int(start_point[1]))
+    y, x = start_point
+    # Explore the image in the direction of the with a cone
+
+    cone_angle = np.deg2rad(5)  # Angle of the cone in radians
+
+    path = List.empty_list(tuple_type)
+
+    offset_angles = np.linspace(0, cone_angle, num=10) 
+    all_angles = np.concatenate((angle + offset_angles, angle - offset_angles[1:]))  # Add negative angles for symmetry
+    for step in range(1, max_length):
+        found_continuity = False
+        for alpha in all_angles:
+            new_y = int(start_point[0] + step * np.sin(alpha))
+            new_x = int(start_point[1] + step * np.cos(alpha))
+
+            while(abs(new_y - y) > 1):
+                new_y += -1 if new_y > y else 1
+            while(abs(new_x - x) > 1):
+                new_x += -1 if new_x > x else 1
+
+
+            # Check if the point is out of bounds
+            if new_y < 0 or new_y >= image.shape[0] or new_x < 0 or new_x >= image.shape[1]:
+                return path
+            # Look up the color at a cone 
+           
+            current_color = image[new_y, new_x].astype(np.float32)
+
+            if current_color.any() == 0:
+                continue
+            
+            difference = np.sqrt(np.sum((current_color - start_color)**2)) / np.sqrt(np.sum(start_color**2))
+            if difference < threshold:
+
+                found_continuity = True
+                path.append((new_y, new_x))
+                y, x = new_y, new_x
+
+                break
+        
+        if not found_continuity:
+            return path
+
+    return path
+
+@njit
+def fill_path(image, path, value):
+    for point in path:
+        y, x = point
+        if 0 <= y < image.shape[0] and 0 <= x < image.shape[1]:
+            image[y, x] = value
+
+
+def prolongate_endpoints(image, skeleton, segmentation, max_search=75, threshold=0.1):
+    """
+    Estimate the orientation of the fibers and prolongate the endpoints
+    based on the skeleton if the difference in color in the image is not significant.
+    This is to avoid a segmentation too short.
+    """
+
+
+    endpoints = np.asarray(find_endpoints(skeleton))
+    if len(endpoints) == 0:
+        return segmentation, skeleton
+    
+
+    
+    
+    points_angle = compute_points_angle(skeleton, endpoints, steps=200, oriented=True)
+
+    for i, (point, angle) in enumerate(zip(endpoints, points_angle)):
+      
+        # Prolongate the endpoint in the direction of the angle
+        y, x = point
+        label = int(segmentation[y, x])
+
+        # Extract the bounding box of the image (max_search pixels in each direction)
+        y_min = max(0, y - max_search)
+        y_max = min(image.shape[0], y + max_search)
+        x_min = max(0, x - max_search)
+        x_max = min(image.shape[1], x + max_search)
+
+
+        bbox = image[y_min:y_max, x_min:x_max]
+        
+        # Local thresholding
+        if bbox.size == 0:
+            continue
+        bbox = cv2.GaussianBlur(bbox, None, sigmaX=1.5, sigmaY=1.5)
+        # threshold_value = threshold_otsu(bbox)
+        # # Apply thresholding to the bounding box
+        # bbox[bbox < threshold_value] = 0
+
+        # Express the start point in the local coordinate system of the bounding box
+        start_color = bbox[y - y_min, x - x_min]
+
+
+        start_point = (y - y_min, x - x_min)
+        
+        path = follow_along_direction_until_change(
+            start_point, start_color, angle, bbox.astype(np.float32), threshold=threshold, max_length=max_search
+        )
+
+
+        
+        if len(path) >0:
+            # Express the path in the global coordinate system
+            path = [(y + y_min, x + x_min) for (y, x) in path]
+            fill_path(segmentation, path, label)
+        
+      
+       
+    return segmentation, (segmentation > 0).astype(np.uint8)
+
+
+
+

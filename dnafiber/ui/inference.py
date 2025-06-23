@@ -7,9 +7,9 @@ import torch
 
 
 @st.cache_data
-def ui_inference(_model, _image, _device, postprocess=True, id=None):
+def ui_inference(_model, _image, _device, postprocess=True, threshold=10, id=None):
     return ui_inference_cacheless(
-        _model, _image, _device, postprocess=postprocess, id=id
+        _model, _image, _device, postprocess=postprocess, threshold=threshold, id=id
     )
 
 
@@ -22,7 +22,7 @@ def get_model(model_name):
     return model
 
 
-def ui_inference_cacheless(_model, _image, _device, postprocess=True, id=None):
+def ui_inference_cacheless(_model, _image, _device, postprocess=True, threshold=10, id=None, only_segmentation=False):
     """
     A cacheless version of the ui_inference function.
     This function does not use caching and is intended for use in scenarios where caching is not desired.
@@ -63,7 +63,8 @@ def ui_inference_cacheless(_model, _image, _device, postprocess=True, id=None):
                 scale=st.session_state.get("pixel_size", 0.13),
             )
     output = output.astype(np.uint8)
-    if postprocess:
-        with st.spinner("Post-processing segmentation..."):
-            output = refine_segmentation(output, fix_junctions=postprocess)
+    if only_segmentation:
+        return output
+    with st.spinner("Post-processing segmentation..."):
+        output = refine_segmentation(_image, output, post_process=postprocess, threshold=threshold)
     return output

@@ -8,8 +8,8 @@ from dnafiber.ui.utils import (
     get_resized_image,
     bokeh_imshow,
     pad_image_to_croppable,
-    numpy_to_base64_png,
 )
+from dnafiber.ui.components import show_fibers, table_components
 from dnafiber.deployment import MODELS_ZOO
 from dnafiber.ui.inference import ui_inference, get_model
 from skimage.util import view_as_blocks
@@ -33,7 +33,7 @@ st.set_page_config(
 st.title("Viewer")
 
 
-@st.cache_resource
+# @st.cache_resource
 def display_prediction(_prediction, _image, image_id=None):
     max_width = 2048
     image = _image
@@ -163,48 +163,6 @@ def display_prediction(_prediction, _image, image_id=None):
     return fig
 
 
-@st.cache_data
-def show_fibers(_prediction, _image, image_id=None):
-    data = dict(
-        fiber_id=[],
-        firstAnalog=[],
-        secondAnalog=[],
-        ratio=[],
-        fiber_type=[],
-        visualization=[],
-    )
-
-    for fiber in _prediction:
-        data["fiber_id"].append(fiber.fiber_id)
-        r, g = fiber.counts
-        red_length = st.session_state["pixel_size"] * r
-        green_length = st.session_state["pixel_size"] * g
-        data["firstAnalog"].append(f"{red_length:.3f} ")
-        data["secondAnalog"].append(f"{green_length:.3f} ")
-        data["ratio"].append(f"{green_length / red_length:.3f}")
-        data["fiber_type"].append(fiber.fiber_type)
-
-        x, y, w, h = fiber.bbox
-
-        visu = _image[y : y + h, x : x + w, :]
-        visu = cv2.normalize(visu, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-        data["visualization"].append(visu)
-
-    df = pd.DataFrame(data)
-    df = df.rename(
-        columns={
-            "firstAnalog": "First analog (µm)",
-            "secondAnalog": "Second analog (µm)",
-            "ratio": "Ratio",
-            "fiber_type": "Fiber type",
-            "fiber_id": "Fiber ID",
-            "visualization": "Visualization",
-        }
-    )
-    df["Visualization"] = df["Visualization"].apply(lambda x: numpy_to_base64_png(x))
-    return df
-
-
 def start_inference():
     image = st.session_state.image_inference
     image = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
@@ -221,8 +179,9 @@ def start_inference():
         model,
         image,
         "cuda" if torch.cuda.is_available() else "cpu",
-        st.session_state.post_process,
-        st.session_state.image_id,
+        postprocess=st.session_state.post_process,
+        threshold=st.session_state.elongation_threshold,
+        id=st.session_state.image_id,
     )
     prediction = [
         p
@@ -233,39 +192,7 @@ def start_inference():
 
     with tab_fibers:
         df = show_fibers(prediction, image, st.session_state.image_id)
-
-        event = st.dataframe(
-            df,
-            on_select="rerun",
-            selection_mode="multi-row",
-            use_container_width=True,
-            column_config={
-                "Visualization": st.column_config.ImageColumn(
-                    "Visualization",
-                    help="Visualization of the fiber",
-                )
-            },
-        )
-
-        rows = event["selection"]["rows"]
-        columns = df.columns[:-2]
-        df = df.iloc[rows][columns]
-
-        cols = st.columns(3)
-        with cols[0]:
-            copy_to_clipboard = st.button(
-                "Copy selected fibers to clipboard",
-                help="Copy the selected fibers to clipboard in CSV format.",
-            )
-            if copy_to_clipboard:
-                df.to_clipboard(index=False)
-        with cols[2]:
-            st.download_button(
-                "Download selected fibers",
-                data=df.to_csv(index=False).encode("utf-8"),
-                file_name=f"fibers_{st.session_state.image_id}.csv",
-                mime="text/csv",
-            )
+        table_components(df)
 
     with tab_viewer:
         max_width = 2048
@@ -359,7 +286,7 @@ if on_session_start():
         block_size = st.slider(
             "Block size",
             min_value=256,
-            max_value=min(4096, max(h, w)),
+            max_value=min(8192, max(h, w)),
             value=min(2048, max(h, w)),
             step=256,
         )
@@ -402,6 +329,14 @@ if on_session_start():
                 value=True,
                 help="Apply post-processing to the prediction",
             )
+
+            if st.session_state.post_process:
+                st.session_state.elongation_threshold = st.slider(
+                    "Post-processing elongation threshold (%)",
+                    min_value=0,
+                    max_value=15,
+                    value=st.session_state.get("elongation_threshold", 2),
+                    step=1,)
 
         st.session_state.model = (
             (MODELS_ZOO[model_name] + "_finetuned")

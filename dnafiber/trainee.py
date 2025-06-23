@@ -10,7 +10,6 @@ from huggingface_hub import PyTorchModelHubMixin
 import torch
 import torchvision
 from dnafiber.metric import DNAFIBERMetric
-from dnafiber.model.steered_cnn import DNAFiberSteeredCNN
 from skimage.measure import label
 
 
@@ -35,6 +34,7 @@ class Trainee(LightningModule, PyTorchModelHubMixin):
         ):
             self.model = None
         elif self.model_config["arch"] == "steered_cnn":
+            from dnafiber.model.steered_cnn import DNAFiberSteeredCNN
             self.model = DNAFiberSteeredCNN(**self.model_config)
         else:
             self.model = smp.create_model(classes=3, **self.model_config, dropout=0.2)

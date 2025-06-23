@@ -10,8 +10,8 @@ from PIL import Image
 import io
 import base64
 
-MAX_WIDTH = 512
-MAX_HEIGHT = 512
+MAX_WIDTH = 1024
+MAX_HEIGHT = 1024
 
 
 
@@ -45,8 +45,15 @@ def load_image(_filepath, id=None):
 
 @st.cache_data
 def get_image(_filepath, reverse_channel, id):
-    filename = str(_filepath.name)
-    image = load_image(_filepath, id)
+    return get_image_cacheless(_filepath, reverse_channel, id)
+
+def get_image_cacheless(filepath, reverse_channel, id):
+    """
+    A cacheless version of the get_image function.
+    This function does not use caching and is intended for use in scenarios where caching is not desired.
+    """
+    filename = str(filepath.name)
+    image = load_image(filepath, id)
     if filename.endswith(".czi") or filename.endswith(".tif") or filename.endswith(".tiff"):
         image = preprocess(image, reverse_channel)
     image = cv2.normalize(

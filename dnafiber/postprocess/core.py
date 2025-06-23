@@ -7,7 +7,7 @@ from scipy.spatial.distance import cdist
 from scipy.sparse.csgraph import connected_components
 from scipy.sparse import csr_array
 from skimage.morphology import skeletonize
-from dnafiber.postprocess.skan import find_line_intersection
+from dnafiber.postprocess.skan import find_line_intersection, prolongate_endpoints
 from dnafiber.postprocess.fiber import Fiber, FiberProps, Bbox
 from itertools import compress
 import matplotlib.pyplot as plt
@@ -187,9 +187,15 @@ def handle_ccs_with_junctions(
     return jncts_fibers
 
 
-def refine_segmentation(segmentation, fix_junctions=True, show=False):
+def refine_segmentation(image, segmentation, post_process=True, threshold=10, x_offset=0, y_offset=0):
     skeleton = skeletonize(segmentation > 0, method="lee").astype(np.uint8)
     skeleton_gt = skeleton * segmentation
+    if post_process:
+
+        skeleton_gt, skeleton = prolongate_endpoints(
+            image, skeleton, skeleton_gt, max_search=100, threshold=threshold/100
+        )
+
     retval, labels, stats, centroids = cv2.connectedComponentsWithStatsWithAlgorithm(
         skeleton, connectivity=8, ccltype=cv2.CCL_BOLELLI, ltype=cv2.CV_16U
     )
@@ -204,6 +210,7 @@ def refine_segmentation(segmentation, fix_junctions=True, show=False):
         ],
     ]
 
+    
     local_fibers = []
     coordinates = []
     junctions = []
@@ -222,7 +229,7 @@ def refine_segmentation(segmentation, fix_junctions=True, show=False):
     
 
     fibers = []
-    if fix_junctions:
+    if post_process:
         has_junctions = [len(j) > 0 for j in junctions]
         for fiber, coordinate in zip(
             compress(local_fibers, np.logical_not(has_junctions)),
@@ -235,12 +242,16 @@ def refine_segmentation(segmentation, fix_junctions=True, show=False):
                 height=coordinate[3],
             )
             fibers.append(Fiber(bbox=bbox, data=fiber))
-
-        fibers += handle_ccs_with_junctions(
-            compress(local_fibers, has_junctions),
-            compress(junctions, has_junctions),
-            compress(coordinates, has_junctions),
-        )
+        # Handle fibers with junctions
+        try:
+            fibers += handle_ccs_with_junctions(
+                compress(local_fibers, has_junctions),
+                compress(junctions, has_junctions),
+                compress(coordinates, has_junctions),
+            )
+        except IndexError:
+            # If there is an IndexError, it means that there are no fibers with junctions
+            pass
     else:
         for fiber, coordinate in zip(local_fibers, coordinates):
             bbox = Bbox(
@@ -252,5 +263,9 @@ def refine_segmentation(segmentation, fix_junctions=True, show=False):
             fibers.append(Fiber(bbox=bbox, data=fiber))
 
     fiberprops = [FiberProps(fiber=f, fiber_id=i) for i, f in enumerate(fibers)]
+
+    for fiber in fiberprops:
+        fiber.fiber.bbox.x += x_offset
+        fiber.fiber.bbox.y += y_offset
 
     return fiberprops

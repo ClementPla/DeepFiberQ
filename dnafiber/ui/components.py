@@ -5,7 +5,10 @@ from dnafiber.ui.utils import numpy_to_base64_png
 import math
 
 @st.cache_data
-def show_fibers(_prediction, _image, image_id=None):
+def show_fibers(_prediction, _image, image_id=None, resolution=400):
+    return show_fibers_cacheless(_prediction, _image, image_id=image_id)
+    
+def show_fibers_cacheless(_prediction, _image, image_id=None, resolution=400):
     data = dict(
         fiber_id=[],
         firstAnalog=[],
@@ -39,8 +42,8 @@ def show_fibers(_prediction, _image, image_id=None):
 
         # Scale the visualization to a minimum width of 256 pixels
         
-        if visu.shape[1] != 400:
-            scale = 400 / visu.shape[1]
+        if visu.shape[1] != resolution:
+            scale = resolution / visu.shape[1]
             visu = cv2.resize(
                 visu,
                 None,

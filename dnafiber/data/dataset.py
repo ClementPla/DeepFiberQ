@@ -39,7 +39,7 @@ def convert_mask(mask):
     output[mask[:, :, 1] > 200] = 2
     binary_mask = output > 0
     skeleton = skeletonize(binary_mask) * output
-    output = expand_labels(skeleton, 3)
+    output = expand_labels(skeleton, 2)
     output = np.clip(output, 0, 2)
     output = output.astype(np.uint8)
     return {"mask": output}
@@ -289,6 +289,8 @@ class FiberDatamodule(LightningDataModule):
             batch_size=self.batch_size,
             shuffle=False,
             num_workers=self.num_workers,
+            pin_memory=True,
+            persistent_workers=False
         )
 
 

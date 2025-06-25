@@ -14,7 +14,6 @@ MAX_WIDTH = 1024
 MAX_HEIGHT = 1024
 
 
-
 TYPE_MAPPING = {
     0: "BG",
     1: "SINGLE",
@@ -23,7 +22,7 @@ TYPE_MAPPING = {
     4: "MULTICOLOR",
 }
 
-@st.cache_data
+
 def load_image(_filepath, id=None):
     filename = str(_filepath.name)
     if filename.endswith(".czi"):
@@ -42,10 +41,10 @@ def load_image(_filepath, id=None):
         raise NotImplementedError(f"File type {filename} is not supported yet")
 
 
-
 @st.cache_data
 def get_image(_filepath, reverse_channel, id):
     return get_image_cacheless(_filepath, reverse_channel, id)
+
 
 def get_image_cacheless(filepath, reverse_channel, id):
     """
@@ -54,14 +53,16 @@ def get_image_cacheless(filepath, reverse_channel, id):
     """
     filename = str(filepath.name)
     image = load_image(filepath, id)
-    if filename.endswith(".czi") or filename.endswith(".tif") or filename.endswith(".tiff"):
+    if (
+        filename.endswith(".czi")
+        or filename.endswith(".tif")
+        or filename.endswith(".tiff")
+    ):
         image = preprocess(image, reverse_channel)
-    image = cv2.normalize(
-        image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
-    )
+    image = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
     return image
-        
-    
+
+
 def get_multifile_image(_filepaths):
     result = None
 
@@ -79,19 +80,18 @@ def get_multifile_image(_filepaths):
         chan2 = None
 
     result = np.zeros((h, w, 3), dtype=np.uint8)
-    
+
     if chan1 is not None:
         result[:, :, 0] = chan1
     else:
         result[:, :, 0] = chan2
-    
+
     if chan2 is not None:
         result[:, :, 1] = chan2
     else:
         result[:, :, 1] = chan1
-    
-    return result
 
+    return result
 
 
 def numpy_to_base64_png(image_array):

@@ -182,20 +182,19 @@ def handle_ccs_with_junctions(
     """
     jncts_fibers = []
     for fiber, junction, coordinate in zip(ccs, junctions, coordinates):
+        
         jncts_fibers += handle_multiple_fiber_in_cc(fiber, junction, coordinate)
 
     return jncts_fibers
 
 
-def refine_segmentation(image, segmentation, post_process=True, threshold=10, x_offset=0, y_offset=0):
-    skeleton = skeletonize(segmentation > 0, method="lee").astype(np.uint8)
-    skeleton_gt = skeleton * segmentation
-    if post_process:
-
-        skeleton_gt, skeleton = prolongate_endpoints(
-            image, skeleton, skeleton_gt, max_search=100, threshold=threshold/100
-        )
-
+def extract_fibers(
+    skeleton,
+    skeleton_gt,
+    post_process,
+    x_offset: int = 0,
+    y_offset: int = 0,
+):
     retval, labels, stats, centroids = cv2.connectedComponentsWithStatsWithAlgorithm(
         skeleton, connectivity=8, ccltype=cv2.CCL_BOLELLI, ltype=cv2.CV_16U
     )
@@ -210,7 +209,6 @@ def refine_segmentation(image, segmentation, post_process=True, threshold=10, x_
         ],
     ]
 
-    
     local_fibers = []
     coordinates = []
     junctions = []
@@ -226,7 +224,6 @@ def refine_segmentation(image, segmentation, post_process=True, threshold=10, x_
         local_junctions = np.where(local_junctions)
         local_junctions = np.array(local_junctions).transpose()
         junctions.append(local_junctions)
-    
 
     fibers = []
     if post_process:
@@ -249,7 +246,7 @@ def refine_segmentation(image, segmentation, post_process=True, threshold=10, x_
                 compress(junctions, has_junctions),
                 compress(coordinates, has_junctions),
             )
-        except IndexError:
+        except (IndexError, ValueError):
             # If there is an IndexError, it means that there are no fibers with junctions
             pass
     else:
@@ -269,3 +266,22 @@ def refine_segmentation(image, segmentation, post_process=True, threshold=10, x_
         fiber.fiber.bbox.y += y_offset
 
     return fiberprops
+
+
+def refine_segmentation(
+    image, segmentation, post_process=True, threshold=2, x_offset=0, y_offset=0
+):
+    skeleton = skeletonize(segmentation > 0, method="lee").astype(np.uint8)
+    skeleton_gt = skeleton * segmentation
+    if post_process:
+        skeleton_gt, skeleton = prolongate_endpoints(
+            image, skeleton, skeleton_gt, max_search=100, threshold=threshold / 100
+        )
+
+    return extract_fibers(
+        skeleton,
+        skeleton_gt,
+        post_process=post_process,
+        x_offset=x_offset,
+        y_offset=y_offset,
+    )

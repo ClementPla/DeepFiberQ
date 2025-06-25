@@ -14,6 +14,7 @@ class DNAFIBERMetric(Metric):
             default=torch.tensor(0, dtype=torch.int64),
             dist_reduce_fx="sum",
         )
+
         self.add_state(
             "fiber_red_dice",
             default=torch.tensor(0, dtype=torch.float32),
@@ -101,6 +102,8 @@ class DNAFIBERMetric(Metric):
                     common_mask = pred_mask | gt_mask
                     pred_fiber = preds[i][common_mask]
                     gt_fiber = target[i][common_mask]
+                    
+
                     dices = F.dice(
                         pred_fiber,
                         gt_fiber,

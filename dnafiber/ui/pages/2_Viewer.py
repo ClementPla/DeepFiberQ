@@ -336,7 +336,8 @@ if on_session_start():
                     min_value=0,
                     max_value=15,
                     value=st.session_state.get("elongation_threshold", 2),
-                    step=1,)
+                    step=1,
+                )
 
         st.session_state.model = (
             (MODELS_ZOO[model_name] + "_finetuned")

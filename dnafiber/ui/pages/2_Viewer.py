@@ -33,7 +33,6 @@ st.set_page_config(
 st.title("Viewer")
 
 
-# @st.cache_resource
 def display_prediction(_prediction, _image, image_id=None):
     max_width = 2048
     image = _image
@@ -65,7 +64,7 @@ def display_prediction(_prediction, _image, image_id=None):
         labels_maps[
             y : y + data.shape[0],
             x : x + data.shape[1],
-        ] = data
+        ][data > 0] = data[data > 0]
     p1 = figure(
         width=600,
         x_range=Range1d(-image.shape[1] / 8, image.shape[1] * 1.125, bounds="auto"),
@@ -163,7 +162,7 @@ def display_prediction(_prediction, _image, image_id=None):
     return fig
 
 
-def start_inference():
+def start_inference(use_tta=True):
     image = st.session_state.image_inference
     image = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
 
@@ -179,8 +178,8 @@ def start_inference():
         model,
         image,
         "cuda" if torch.cuda.is_available() else "cpu",
-        postprocess=st.session_state.post_process,
-        threshold=st.session_state.elongation_threshold,
+        use_tta=use_tta,
+        threshold=0,
         id=st.session_state.image_id,
     )
     prediction = [
@@ -199,7 +198,11 @@ def start_inference():
         if image.shape[1] > max_width:
             st.toast("Images are displayed at a lower resolution of 2048 pixel wide")
 
-        fig = display_prediction(prediction, image, st.session_state.image_id)
+        fig = display_prediction(
+            _prediction=prediction,
+            _image=image,
+            image_id=st.session_state.image_id,
+        )
         streamlit_bokeh(fig, use_container_width=True)
 
 
@@ -261,7 +264,7 @@ if on_session_start():
     index = displayed_names.index(selected_file)
     file = files[index]
     if isinstance(file, tuple):
-        file_id = file[0].file_id if file[0] is not None else file[1].file_id
+        file_id = str(file[0])
         if file[0] is None or file[1] is None:
             missing = "First analog" if file[0] is None else "Second analog"
             st.warning(
@@ -270,7 +273,7 @@ if on_session_start():
             )
         image = get_multifile_image(file)
     else:
-        file_id = file.file_id
+        file_id = str(file)
         image = get_image(
             file,
             reverse_channel=st.session_state.get("reverse_channels", False),
@@ -309,10 +312,11 @@ if on_session_start():
                 index=0,
                 help="Select a model to use for inference",
             )
-            finetuned = st.checkbox(
-                "Use finetuned model",
+
+            use_tta = st.checkbox(
+                "Use test time augmentation (TTA)",
                 value=True,
-                help="Use a finetuned model for inference",
+                help="Use test time augmentation to improve segmentation results.",
             )
 
             col1, col2 = st.columns(2)
@@ -324,26 +328,7 @@ if on_session_start():
                     disabled=True,
                 )
 
-            st.session_state.post_process = st.checkbox(
-                "Post-process",
-                value=True,
-                help="Apply post-processing to the prediction",
-            )
-
-            if st.session_state.post_process:
-                st.session_state.elongation_threshold = st.slider(
-                    "Post-processing elongation threshold (%)",
-                    min_value=0,
-                    max_value=15,
-                    value=st.session_state.get("elongation_threshold", 2),
-                    step=1,
-                )
-
-        st.session_state.model = (
-            (MODELS_ZOO[model_name] + "_finetuned")
-            if finetuned
-            else MODELS_ZOO[model_name]
-        )
+        st.session_state.model = MODELS_ZOO[model_name] + "_finetuned"
 
         which_y = st.session_state.get("which_y", 0)
         which_x = st.session_state.get("which_x", 0)
@@ -410,16 +395,13 @@ if on_session_start():
 
     st.session_state.image_inference = image
     st.session_state.image_id = (
-        file_id
-        + str(which_x)
-        + str(which_y)
-        + str(bx)
-        + str(by)
-        + str(model_name)
-        + ("_finetuned" if finetuned else "")
+        (file_id + str(which_x) + str(which_y) + str(bx) + str(by) + str(model_name))
+        + "_use_tta"
+        if use_tta
+        else "_no_tta"
     )
     col1, col2, col3 = st.columns([1, 1, 1])
-    start_inference()
+    start_inference(use_tta=use_tta)
 else:
     st.switch_page("pages/1_Load.py")
 

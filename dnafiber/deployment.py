@@ -2,6 +2,7 @@ from dnafiber.trainee import Trainee
 from dnafiber.postprocess.fiber import FiberProps
 import pandas as pd
 
+
 def _get_model(revision, device="cuda"):
     if revision is None:
         model = Trainee.from_pretrained(
@@ -11,6 +12,7 @@ def _get_model(revision, device="cuda"):
         model = Trainee.from_pretrained(
             "ClementP/DeepFiberQ",
             revision=revision,
+            force_download=True,
         )
     return model.eval().to(device)
 
@@ -34,11 +36,8 @@ def format_results(results: list[FiberProps], pixel_size: float) -> pd.DataFrame
     return pd.DataFrame.from_dict(all_results)
 
 
-
-
 MODELS_ZOO = {
     "Ensemble": "ensemble",
-    "SegFormer MiT-B4": "segformer_mit_b4",
-    "SegFormer MiT-B2": "segformer_mit_b2",
     "U-Net SE-ResNet50": "unet_se_resnet50",
+    "U-Net ResNet50x4_clip": "unet_tu-resnet50x4_clip",
 }

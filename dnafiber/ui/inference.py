@@ -7,10 +7,8 @@ import torch
 
 
 @st.cache_data
-def ui_inference(_model, _image, _device, postprocess=True, threshold=10, id=None):
-    return ui_inference_cacheless(
-        _model, _image, _device, postprocess=postprocess, threshold=threshold, id=id
-    )
+def ui_inference(_model, _image, _device, use_tta=True, threshold=10, id=None):
+    return ui_inference_cacheless(_model, _image, _device, threshold=threshold)
 
 
 @st.cache_resource
@@ -22,7 +20,9 @@ def get_model(model_name):
     return model
 
 
-def ui_inference_cacheless(_model, _image, _device, postprocess=True, threshold=10, id=None, only_segmentation=False):
+def ui_inference_cacheless(
+    _model, _image, _device, use_tta=True, threshold=10, only_segmentation=False
+):
     """
     A cacheless version of the ui_inference function.
     This function does not use caching and is intended for use in scenarios where caching is not desired.
@@ -40,6 +40,7 @@ def ui_inference_cacheless(_model, _image, _device, postprocess=True, threshold=
                             model,
                             image=_image,
                             device=_device,
+                            use_tta=use_tta,
                             scale=st.session_state.get("pixel_size", 0.13),
                             only_probabilities=True,
                         ).cpu()
@@ -50,6 +51,7 @@ def ui_inference_cacheless(_model, _image, _device, postprocess=True, threshold=
                                 model,
                                 image=_image,
                                 device=_device,
+                                use_tta=use_tta,
                                 scale=st.session_state.get("pixel_size", 0.13),
                                 only_probabilities=True,
                             ).cpu()
@@ -66,5 +68,5 @@ def ui_inference_cacheless(_model, _image, _device, postprocess=True, threshold=
     if only_segmentation:
         return output
     with st.spinner("Post-processing segmentation..."):
-        output = refine_segmentation(_image, output, post_process=postprocess, threshold=threshold)
+        output = refine_segmentation(_image, output, threshold=threshold)
     return output

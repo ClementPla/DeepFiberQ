@@ -23,7 +23,7 @@ TYPE_MAPPING = {
 }
 
 
-def load_image(_filepath, id=None):
+def load_image(_filepath):
     filename = str(_filepath.name)
     if filename.endswith(".czi"):
         return read_czi(_filepath)
@@ -43,16 +43,16 @@ def load_image(_filepath, id=None):
 
 @st.cache_data
 def get_image(_filepath, reverse_channel, id):
-    return get_image_cacheless(_filepath, reverse_channel, id)
+    return get_image_cacheless(_filepath, reverse_channel)
 
 
-def get_image_cacheless(filepath, reverse_channel, id):
+def get_image_cacheless(filepath, reverse_channel):
     """
     A cacheless version of the get_image function.
     This function does not use caching and is intended for use in scenarios where caching is not desired.
     """
     filename = str(filepath.name)
-    image = load_image(filepath, id)
+    image = load_image(filepath)
     if (
         filename.endswith(".czi")
         or filename.endswith(".tif")

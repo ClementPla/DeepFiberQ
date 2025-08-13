@@ -12,6 +12,9 @@ import torch
 from nntools.dataset.composer import CacheBullet
 from skimage.filters import sato
 import cv2
+from timm.data.loader import MultiEpochsDataLoader
+
+cv2.setNumThreads(0)
 
 
 @D.nntools_wrapper
@@ -35,11 +38,11 @@ def to_polar_space(image, mask):
 @D.nntools_wrapper
 def convert_mask(mask):
     output = np.zeros(mask.shape[:2], dtype=np.uint8)
-    output[mask[:, :, 0] > 200] = 1
-    output[mask[:, :, 1] > 200] = 2
+    output[mask[:, :, 0] > 150] = 1
+    output[mask[:, :, 1] > 150] = 2
     binary_mask = output > 0
     skeleton = skeletonize(binary_mask) * output
-    output = expand_labels(skeleton, 2)
+    output = expand_labels(skeleton, 3)
     output = np.clip(output, 0, 2)
     output = output.astype(np.uint8)
     return {"mask": output}
@@ -93,7 +96,7 @@ class FiberDatamodule(LightningDataModule):
     def __init__(
         self,
         root_img,
-        crop_size=(256, 256),
+        crop_size=None,
         shape=1024,
         batch_size=32,
         num_workers=8,
@@ -124,6 +127,7 @@ class FiberDatamodule(LightningDataModule):
                 shape=(self.shape, self.shape),
                 use_cache=self.kwargs.get("use_cache", False),
                 cache_option=self.kwargs.get("cache_option", None),
+                id=version,
             )  # type: ignore
             dataset.img_filepath["image"] = np.asarray(  # type: ignore
                 sorted(
@@ -152,7 +156,7 @@ class FiberDatamodule(LightningDataModule):
         self.test.use_cache = False
 
         stratify = []
-        for f in self.train.img_filepath["image"]:
+        for f in self.train.img_filepath["mask"]:
             if "tile" in f.stem:
                 stratify.append(int(f.parent.stem))
             else:
@@ -160,7 +164,7 @@ class FiberDatamodule(LightningDataModule):
         train_idx, val_idx = train_test_split(
             np.arange(len(self.train)),  # type: ignore
             stratify=stratify,
-            test_size=0.2,
+            test_size=0.1,
             random_state=42,
         )
         self.train.subset(train_idx)
@@ -182,27 +186,37 @@ class FiberDatamodule(LightningDataModule):
             A.Compose(
                 transforms
                 + [
-                    A.HorizontalFlip(),
-                    A.VerticalFlip(),
-                    A.Affine(scale=(0.8, 1.2), rotate=(-45, 45), p=0.5),
-                    A.ElasticTransform(alpha=1.5),
-                    A.RandomRotate90(),
+                    A.Affine(
+                        scale=(0.5, 2),
+                        rotate=(-75, 75),
+                        p=0.75,
+                        border_mode=cv2.BORDER_REFLECT101,
+                        balanced_scale=True,
+                        keep_ratio=True,
+                        mask_interpolation=cv2.INTER_NEAREST,
+                    ),
+                ]
+                + [
+                    A.SquareSymmetry(
+                        p=0.5,
+                    ),
                     A.OneOf(
                         [
                             A.RandomBrightnessContrast(
-                                brightness_limit=(-0.2, 0.1),
-                                contrast_limit=(-0.2, 0.1),
-                                p=0.5,
+                                brightness_limit=(-0.2, 0.2),
+                                contrast_limit=(-0.2, 0.2),
+                                p=0.75,
                             ),
                             A.HueSaturationValue(
-                                hue_shift_limit=(-5, 5),
+                                hue_shift_limit=(-10, 10),
                                 sat_shift_limit=(-20, 20),
                                 val_shift_limit=(-20, 20),
-                                p=0.5,
+                                p=0.75,
                             ),
-                        ]
+                        ],
+                        p=0.75,
                     ),
-                    A.GaussNoise(std_range=(0.0, 0.1), p=0.5),
+                    A.GaussNoise(std_range=(0.0, 0.05), p=0.2),
                 ],
                 bbox_params=A.BboxParams(
                     format="pascal_voc", label_fields=["fiber_ids"], min_visibility=0.95
@@ -214,24 +228,10 @@ class FiberDatamodule(LightningDataModule):
         ]
 
     def cast_operators(self):
-        return (
-            ([sato_filter] if self.sato_filter else [])
-            + ([to_polar_space] if self.polar_space else [])
-            + [
-                A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
-                if not self.use_bbox
-                else A.Normalize(
-                    mean=(
-                        0.0,
-                        0.0,
-                        0.0,
-                    ),
-                    std=(1.0, 1.0, 1.0),
-                    max_pixel_value=255,
-                ),
-                ToTensorV2(),
-            ]
-        )
+        return [
+            A.Normalize(max_pixel_value=255.0),
+            ToTensorV2(),
+        ]
 
     def train_dataloader(self):
         if self.use_bbox:
@@ -290,7 +290,8 @@ class FiberDatamodule(LightningDataModule):
             shuffle=False,
             num_workers=self.num_workers,
             pin_memory=True,
-            persistent_workers=False
+            prefetch_factor=1,
+            persistent_workers=False,
         )
 
 

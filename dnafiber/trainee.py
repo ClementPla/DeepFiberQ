@@ -1,6 +1,6 @@
 from lightning import LightningModule
 import segmentation_models_pytorch as smp
-from monai.losses.dice import GeneralizedDiceLoss
+from monai.losses.dice import GeneralizedDiceLoss, DiceCELoss
 from torchmetrics.classification import Dice, JaccardIndex
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
@@ -11,6 +11,7 @@ import torch
 import torchvision
 from dnafiber.metric import DNAFIBERMetric
 from skimage.measure import label
+from torchvision.transforms import Normalize
 
 
 def _convert_activations(module, from_activation, to_activation):
@@ -35,10 +36,23 @@ class Trainee(LightningModule, PyTorchModelHubMixin):
             self.model = None
         elif self.model_config["arch"] == "steered_cnn":
             from dnafiber.model.steered_cnn import DNAFiberSteeredCNN
+
             self.model = DNAFiberSteeredCNN(**self.model_config)
+        elif "patch14" in self.model_config.get("encoder_name", ""):
+            from dnafiber.model.autopadDPT import AutoPad
+
+            # Pad input to be divisible by 14. Input size are usually 512x512, 1024x1024 or 2048x2048
+            self.model = AutoPad(smp.create_model(classes=3, **self.model_config))
+
         else:
-            self.model = smp.create_model(classes=3, **self.model_config, dropout=0.2)
-        self.loss = GeneralizedDiceLoss(to_onehot_y=False, softmax=False)
+            self.model = smp.create_model(classes=3, **self.model_config)
+        self.loss = DiceCELoss(
+            to_onehot_y=False,
+            softmax=False,
+            lambda_ce=5.0,
+            lambda_dice=5.0,
+            label_smoothing=0.1,
+        )
         self.metric = MetricCollection(
             {
                 "dice": Dice(num_classes=num_classes, ignore_index=0),
@@ -50,6 +64,7 @@ class Trainee(LightningModule, PyTorchModelHubMixin):
                 "detection": DNAFIBERMetric(),
             }
         )
+
         self.weight_decay = weight_decay
         self.learning_rate = learning_rate
         self.save_hyperparameters()

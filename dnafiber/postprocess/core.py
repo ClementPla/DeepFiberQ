@@ -182,7 +182,6 @@ def handle_ccs_with_junctions(
     """
     jncts_fibers = []
     for fiber, junction, coordinate in zip(ccs, junctions, coordinates):
-        
         jncts_fibers += handle_multiple_fiber_in_cc(fiber, junction, coordinate)
 
     return jncts_fibers
@@ -268,20 +267,14 @@ def extract_fibers(
     return fiberprops
 
 
-def refine_segmentation(
-    image, segmentation, post_process=True, threshold=2, x_offset=0, y_offset=0
-):
-    skeleton = skeletonize(segmentation > 0, method="lee").astype(np.uint8)
+def refine_segmentation(image, segmentation, threshold=2, x_offset=0, y_offset=0):
+    skeleton = skeletonize(segmentation > 0, method="zhang").astype(np.uint8)
     skeleton_gt = skeleton * segmentation
-    if post_process:
-        skeleton_gt, skeleton = prolongate_endpoints(
-            image, skeleton, skeleton_gt, max_search=100, threshold=threshold / 100
-        )
 
     return extract_fibers(
         skeleton,
         skeleton_gt,
-        post_process=post_process,
+        post_process=True,
         x_offset=x_offset,
         y_offset=y_offset,
     )

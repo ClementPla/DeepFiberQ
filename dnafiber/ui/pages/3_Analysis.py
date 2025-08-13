@@ -132,7 +132,7 @@ def plot_result(seleted_category):
     )
 
 
-def run_one_file(file, model, is_cuda_available):
+def run_one_file(file, model, use_tta):
     if isinstance(file, tuple):
         if file[0] is None:
             filename = file[1].name
@@ -142,20 +142,20 @@ def run_one_file(file, model, is_cuda_available):
     else:
         filename = file.name
         image = get_image_cacheless(
-            file, st.session_state.get("reverse_channels", False), file.file_id
+            file, st.session_state.get("reverse_channels", False)
         )
     start = time.time()
     prediction = ui_inference_cacheless(
         _model=model,
         _image=image,
-        _device="cuda" if is_cuda_available else "cpu",
-        postprocess=False,
+        _device="cuda" if torch.cuda.is_available() else "cpu",
         only_segmentation=True,
+        use_tta=use_tta,
     )
     print(f"Prediction time: {time.time() - start:.2f} seconds for {file.name}")
     h, w = prediction.shape
     start = time.time()
-    y_size, x_size = 8192, 8192
+    y_size, x_size = 4096, 4096
     if h > y_size or w > x_size:
         # Extract blocks from the prediction
 
@@ -170,12 +170,11 @@ def run_one_file(file, model, is_cuda_available):
             for x in range(0, w, x_size)
         ]
 
-        parallel_results = Parallel(n_jobs=8, verbose=10, backend="threading")(
+        parallel_results = Parallel(n_jobs=8, backend="threading")(
             delayed(refine_segmentation)(
                 block_img,
                 block,
-                True,
-                st.session_state.get("elongation_threshold", 2),
+                0,  # threshold
                 x,
                 y,
             )
@@ -187,8 +186,7 @@ def run_one_file(file, model, is_cuda_available):
         results = refine_segmentation(
             image,
             prediction,
-            post_process=True,
-            threshold=st.session_state.get("elongation_threshold", 50),
+            threshold=0,  # threshold,
         )
     print(f"Refinement time: {time.time() - start:.2f} seconds for {filename}")
     results = [fiber for fiber in results if fiber.is_valid]
@@ -197,8 +195,7 @@ def run_one_file(file, model, is_cuda_available):
     return df
 
 
-def run_inference(model_name, pixel_size):
-    is_cuda_available = torch.cuda.is_available()
+def run_inference(model_name, use_tta):
     if "ensemble" in model_name:
         model = [
             _ + "_finetuned" if "finetuned" in model_name else ""
@@ -208,7 +205,7 @@ def run_inference(model_name, pixel_size):
     else:
         model = _get_model(
             revision=model_name,
-            device="cuda" if is_cuda_available else "cpu",
+            device="cuda" if torch.cuda.is_available() else "cpu",
         )
 
     my_bar = st.progress(0, text="Running segmentation...")
@@ -223,7 +220,7 @@ def run_inference(model_name, pixel_size):
         else:
             filename = file.name
         try:
-            df = run_one_file(file, model, is_cuda_available)
+            df = run_one_file(file, model, use_tta)
         except Exception as e:
             st.error(f"Error processing {filename}: {e}")
             continue
@@ -256,10 +253,10 @@ if st.session_state.get("files_uploaded", None):
                 index=0,
                 help="Select a model to use for inference",
             )
-            finetuned = st.checkbox(
-                "Use finetuned model",
+            use_tta = st.checkbox(
+                "Use TTA (Test Time Augmentation)",
                 value=True,
-                help="Use a finetuned model for inference",
+                help="Use Test Time Augmentation to improve segmentation results",
             )
             col1, col2 = st.columns(2)
             with col1:
@@ -277,10 +274,8 @@ if st.session_state.get("files_uploaded", None):
         if run_segmentation:
             st.session_state.image_id = None
             run_inference(
-                model_name=MODELS_ZOO[model_name] + "_finetuned"
-                if finetuned
-                else MODELS_ZOO[model_name],
-                pixel_size=st.session_state.get("pixel_size", 0.13),
+                model_name=MODELS_ZOO[model_name] + "_finetuned",
+                use_tta=use_tta,
             )
             st.balloons()
         if st.session_state.get("results", None) is not None:

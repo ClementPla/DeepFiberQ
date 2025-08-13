@@ -12,7 +12,7 @@ def main():
             "run",
             os.path.join(local_dir, "ui", "Welcome.py"),
             "--server.maxUploadSize",
-            "1024",
+            "2048",
         ],
     )
 

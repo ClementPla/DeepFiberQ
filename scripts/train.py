@@ -1,40 +1,36 @@
 from lightning import Trainer
-from lightning.pytorch.callbacks import ModelCheckpoint
-
+from lightning.pytorch.callbacks import (
+    ModelCheckpoint,
+    EarlyStopping,
+    StochasticWeightAveraging,
+)
+from lightning.pytorch.tuner import Tuner
 from lightning.pytorch.loggers import WandbLogger
 from pathlib import Path
 from nntools.utils import Config
-
+from lightning.pytorch.strategies import DDPStrategy
 from dnafiber.data.dataset import FiberDatamodule
 from dnafiber.trainee import Trainee, TraineeMaskRCNN
-from dnafiber.callbacks import LogPredictionSamplesCallback
 import torch
 import argparse
 from lightning import seed_everything
-from dotenv import load_dotenv
-import os
-from huggingface_hub import HfApi
-from lightning.pytorch.utilities import rank_zero_only
+from dnafiber.model.utils import upload_to_hub
+
 
 seed_everything(1234, workers=True)
 torch.set_float32_matmul_precision("high")
 
-load_dotenv()
 
-HF_TOKEN = os.environ.get("HF_TOKEN")
-
-
-def train(arch, encoder):
+def train(arch, encoder, use_swa=True):
     c = Config("configs/config.yaml")
     c["model"]["arch"] = arch
     c["model"]["encoder_name"] = encoder
     if "vit" in encoder:
         c["model"]["dynamic_img_size"] = True
-    if "mit" in encoder:
-        c["trainer"]["strategy"] = "ddp_find_unused_parameters_true"
 
     datamodule = FiberDatamodule(**c["data"], use_bbox=arch == "maskrcnn")
     traineeClass = TraineeMaskRCNN if arch == "maskrcnn" else Trainee
+    datamodule.setup()
 
     trainee = traineeClass(**c["training"], **c["model"])
 
@@ -50,54 +46,73 @@ def train(arch, encoder):
     callbacks = [
         ModelCheckpoint(
             dirpath=path,
-            monitor="detection_recall",
+            monitor="dice",
             mode="max",
             save_last=True,
             save_top_k=1,
         ),
+        EarlyStopping(
+            monitor="dice",
+            mode="max",
+            patience=10,
+            verbose=True,
+        ),
     ]
+
+    if use_swa:
+        callbacks.append(
+            StochasticWeightAveraging(
+                swa_lrs=1e-2,
+            )
+        )
     trainer = Trainer(
         **c["trainer"],
         callbacks=callbacks,
         logger=logger,
+        # fast_dev_run=2,
+        strategy=DDPStrategy(find_unused_parameters=True),
     )
 
-    datamodule.setup()
-
+    tuner = Tuner(trainer=trainer)
     train_dataloader = datamodule.train_dataloader()
     val_dataloader = datamodule.val_dataloader()
+
+    lr_finder = tuner.lr_find(
+        model=trainee,
+        max_lr=0.05,
+        min_lr=1e-6,
+        train_dataloaders=train_dataloader,
+        val_dataloaders=val_dataloader,
+        early_stop_threshold=None,
+        num_training=100,
+    )
+    new_lr = lr_finder.suggestion()
+    print(f"Suggested learning rate: {new_lr}")
+    c["training"]["learning_rate"] = new_lr
+    trainee.learning_rate = new_lr
+    trainee.hparams.learning_rate = new_lr
     trainer.fit(
-        trainee, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader
-    )
-    # model = traineeClass.load_from_checkpoint(
-    #     "checkpoints/DeepFiberQ++ Combined-Finetuned/dauntless-dragon-7/epoch=699-step=8400.ckpt"
-    # )
-
-    # upload_to_hub(trainee, arch, encoder)
-
-
-@rank_zero_only
-def upload_to_hub(model, arch, encoder):
-    hfapi = HfApi()
-    branch_name = f"{arch}_{encoder}_finetuned"
-    hfapi.create_repo(
-        "ClementP/DeepFiberQ",
-        token=HF_TOKEN,
-        exist_ok=True,
-        repo_type="model",
-    )
-    hfapi.create_branch(
-        "ClementP/DeepFiberQ",
-        branch=branch_name,
-        token=HF_TOKEN,
-        exist_ok=True,
+        model=trainee,
+        train_dataloaders=train_dataloader,
+        val_dataloaders=val_dataloader,
     )
 
-    model.push_to_hub(
-        "ClementP/DeepFiberQ",
-        branch=branch_name,
-        token=HF_TOKEN,
+    # Load the best model from the checkpoint
+    try:
+        trainer.checkpoint_callback.best_model_path
+    except AttributeError:
+        print("No best model found, using the last checkpoint.")
+        trainer.checkpoint_callback.best_model_path = (
+            trainer.checkpoint_callback.last_model_path
+        )
+
+    trainee = traineeClass.load_from_checkpoint(
+        trainer.checkpoint_callback.best_model_path,
+        **c["training"],
+        **c["model"],
     )
+
+    upload_to_hub(model=trainee, arch=arch, encoder=encoder)
 
 
 if __name__ == "__main__":

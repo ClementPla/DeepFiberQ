@@ -1,24 +1,32 @@
 training:
-  learning_rate: 0.0001
+  learning_rate: 0.0005
   weight_decay: 0.0001
 
 trainer:
-  max_epochs: 1000
-  precision: 16-mixed
-  check_val_every_n_epoch: 100
+  max_epochs: 2000
+  precision: 32
+  check_val_every_n_epoch: 25
+  accelerator: gpu
+  devices: [0, 1]
+  gradient_clip_val: 1.0
+  accumulate_grad_batches: 4
+
 
 model:
-  # encoder_name: mit_b2
-  arch: steered_cnn
-  # encoder_weights: imagenet
+  encoder_name: mit_b2
+  encoder_weights: imagenet
+  arch: DPT
+  # encoder_name: tu-eva02_small_patch14_336
+  # dynamic_img_size: True
+  # img_size: 512
 
 
 data:
   shape: 1024
-  batch_size: 48
+  batch_size: 16
   root_img: /home/clement/Documents/data/DNAFiber/
-  crop_size: [512, 512]
-  use_cache: False
+  crop_size: [512,512]
+  use_cache: True
   cache_option: duplicated_memory
   sato_filter: False
-  num_workers: 16
+  num_workers: 8

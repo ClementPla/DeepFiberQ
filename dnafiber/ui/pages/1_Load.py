@@ -1,5 +1,5 @@
 import streamlit as st
-
+from pathlib import Path
 
 st.set_page_config(
     page_title="DN-AI",
@@ -7,84 +7,98 @@ st.set_page_config(
     layout="wide",
 )
 
-def build_multichannel_loader():
 
-    if (
-        st.session_state.get("files_uploaded", None) is None
-        or len(st.session_state.files_uploaded) == 0
-    ):
-        st.session_state["files_uploaded"] = st.file_uploader(
-            label="Upload files",
-            accept_multiple_files=True,
-            type=["czi", "jpeg", "jpg", "png", "tiff", "tif"],
-        )
-    else:
-        st.session_state["files_uploaded"] += st.file_uploader(
-            label="Upload files",
-            accept_multiple_files=True,
-            type=["czi", "jpeg", "jpg", "png", "tiff", "tif"],
-        )
+def build_loader(key, input_description):
+    input_folder = st.text_input(input_description)
+    if input_folder == "":
+        return
+    input_folder = Path(input_folder)
+    if input_folder.is_dir():
+        input_files = list(input_folder.rglob("*.[cC][zZ][iI]"))  # Match CZI files
+        input_files += list(input_folder.rglob("*.[tT][iI][fF]"))  # Match TIF files
+        input_files += list(
+            input_folder.rglob("*.[jJ][pP][eE][gG]")
+        )  # Match JPEG files
+
+        input_files += list(
+            input_folder.rglob("*.[tT][iI][fF][fF]")
+        )  # Match TIFF files
+        input_files += list(input_folder.rglob("*.[jJ][pP][gG]"))  # Match JPG files
+
+        input_files += list(input_folder.rglob("*.[pP][nN][gG]"))  # Match PNG files
+
+        # Cast the path to string
+        st.session_state[key] += input_files
+
+        st.session_state[key] = [f for f in list(set(st.session_state[key]))]
+
+
+def build_multichannel_loader():
+    if st.session_state.get("files_uploaded", None) is None:
+        st.session_state["files_uploaded"] = []
+    build_loader(
+        "files_uploaded",
+        "Enter the path to the folder containing multichannel files",
+    )
+
     st.write("### Channel interpretation")
-    st.markdown("The goal is to obtain an RGB image in the order of <span style='color: red;'>First analog</span>, <span style='color: green;'>Second analog</span>, <span style='color: blue;'>Empty</span>.", unsafe_allow_html=True)
-    st.markdown("By default, we assume that the first channel in CZI/TIFF file is <span style='color: green;'>the second analog</span>, (which happens to be the case in Zeiss microscope) " \
-    "which means that we swap the order of the two channels for processing.", unsafe_allow_html=True)
+    st.markdown(
+        "The goal is to obtain an RGB image in the order of <span style='color: red;'>First analog</span>, <span style='color: green;'>Second analog</span>, <span style='color: blue;'>Empty</span>.",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        "By default, we assume that the first channel in CZI/TIFF file is <span style='color: green;'>the second analog</span>, (which happens to be the case in Zeiss microscope) "
+        "which means that we swap the order of the two channels for processing.",
+        unsafe_allow_html=True,
+    )
     st.write("If this not the intented behavior, please tick the box below:")
     st.session_state["reverse_channels"] = st.checkbox(
         "Reverse the channels interpretation",
         value=False,
     )
-    st.warning("Please note that we only swap the channels for raw (CZI, TIFF) files. JPEG and PNG files "\
-               "are assumed to be already in the correct order (First analog in red and second analog in green). " \
+    st.warning(
+        "Please note that we only swap the channels for raw (CZI, TIFF) files. JPEG and PNG files "
+        "are assumed to be already in the correct order (First analog in red and second analog in green). "
     )
 
-    st.info("" \
-    "The channels order in CZI files does not necessarily match the order in which they are displayed in ImageJ or equivalent. " \
-    "Indeed, such viewers will usually look at the metadata of the file to determine the order of the channels, which we don't. " \
-    "In doubt, we recommend visualizing the image in ImageJ and compare with our viewer. If the channels appear reversed, tick the option above.")
+    st.info(
+        ""
+        "The channels order in CZI files does not necessarily match the order in which they are displayed in ImageJ or equivalent. "
+        "Indeed, such viewers will usually look at the metadata of the file to determine the order of the channels, which we don't. "
+        "In doubt, we recommend visualizing the image in ImageJ and compare with our viewer. If the channels appear reversed, tick the option above."
+    )
+
 
 def build_individual_loader():
-   
     cols = st.columns(2)
     with cols[1]:
-        st.markdown(f"<h3 style='color: {st.session_state['color2']};'>Second analog</h3>", unsafe_allow_html=True)
+        st.markdown(
+            f"<h3 style='color: {st.session_state['color2']};'>Second analog</h3>",
+            unsafe_allow_html=True,
+        )
+        if st.session_state.get("analog_2_files", None) is None:
+            st.session_state["analog_2_files"] = []
+        build_loader(
+            "analog_2_files",
+            "Enter the path to the folder containing second analog files",
+        )
 
-        if (
-            st.session_state.get("analog_2_files", None) is None
-            or len(st.session_state.analog_2_files) == 0
-        ):
-            st.session_state["analog_2_files"] = st.file_uploader(
-                label="Upload second analog file(s)",
-                accept_multiple_files=True,
-                type=["czi", "jpeg", "jpg", "png", "tiff", "tif"],
-            )
-        else:
-            st.session_state["analog_2_files"] += st.file_uploader(
-                label="Upload second analog file(s)",
-                accept_multiple_files=True,
-                type=["czi", "jpeg", "jpg", "png", "tiff", "tif"],
-            )
-        
-        
     with cols[0]:
-        st.markdown(f"<h3 style='color: {st.session_state['color1']};'>First analog</h3>", unsafe_allow_html=True)
-        if (
-            st.session_state.get("analog_1_files", None) is None
-            or len(st.session_state.analog_1_files) == 0
-        ):
-            st.session_state["analog_1_files"] = st.file_uploader(
-                label="Upload first analog file(s)",
-                accept_multiple_files=True,
-                type=["czi", "jpeg", "jpg", "png", "tiff", "tif"],
-            )
-        else:
-            st.session_state["analog_1_files"] += st.file_uploader(
-                label="Upload first analog file(s)",
-                accept_multiple_files=True,
-                type=["czi", "jpeg", "jpg", "png", "tiff", "tif"],)
-    
-    analog_1_files=st.session_state.get("analog_1_files", None)
-    analog_2_files=st.session_state.get("analog_2_files", None)
-    
+        st.markdown(
+            f"<h3 style='color: {st.session_state['color1']};'>First analog</h3>",
+            unsafe_allow_html=True,
+        )
+
+        if st.session_state.get("analog_1_files", None) is None:
+            st.session_state["analog_1_files"] = []
+        build_loader(
+            "analog_1_files",
+            "Enter the path to the folder containing first analog files",
+        )
+
+    analog_1_files = st.session_state.get("analog_1_files", None)
+    analog_2_files = st.session_state.get("analog_2_files", None)
+
     # Remove duplicates from the list of files. We loop through the files and keep only the first occurrence of each file_id.
     def remove_duplicates(files):
         seen_ids = set()
@@ -97,17 +111,20 @@ def build_individual_loader():
 
     analog_1_files = remove_duplicates(analog_1_files or [])
     analog_2_files = remove_duplicates(analog_2_files or [])
-    
-    
+
     if analog_1_files is None and analog_2_files is None:
-        return 
+        return
     else:
-        if len(analog_1_files)>0 and len(analog_2_files)>0 and len(analog_1_files) != len(analog_2_files):
+        if (
+            len(analog_1_files) > 0
+            and len(analog_2_files) > 0
+            and len(analog_1_files) != len(analog_2_files)
+        ):
             st.error("Please upload the same number of analogs files.")
             return
-    
+
     # Always make sure we don't have duplicates in the list of files
-    
+
     analog_1_files = sorted(analog_1_files, key=lambda x: x.name)
     analog_2_files = sorted(analog_2_files, key=lambda x: x.name)
     max_size = max(len(analog_1_files), len(analog_2_files))
@@ -119,8 +136,6 @@ def build_individual_loader():
 
     combined_files = list(zip(analog_1_files, analog_2_files))
 
-    
-
     if (
         st.session_state.get("files_uploaded", None) is None
         or len(st.session_state.files_uploaded) == 0
@@ -128,10 +143,8 @@ def build_individual_loader():
         st.session_state["files_uploaded"] = combined_files
     else:
         st.session_state["files_uploaded"] += combined_files
-    
 
-
-    # If any of the files (analog_1_files or analog_2_files) was included previously in the files_uploaded, 
+    # If any of the files (analog_1_files or analog_2_files) was included previously in the files_uploaded,
     # We remove the previous occurence from the files_uploaded list.
     current_ids = set()
     for f in analog_1_files + analog_2_files:
@@ -144,19 +157,20 @@ def build_individual_loader():
             f1, f2 = file
             if f1 and f2:
                 return True
-            
-            return (f1 is None or f1.name not in current_ids) and (f2 is None or f2.name not in current_ids)
+
+            return (f1 is None or f1.name not in current_ids) and (
+                f2 is None or f2.name not in current_ids
+            )
         else:
             return True
-        
-    st.session_state.files_uploaded = [f for f in st.session_state.files_uploaded if is_not_duplicate(f)]
 
+    st.session_state.files_uploaded = [
+        f for f in st.session_state.files_uploaded if is_not_duplicate(f)
+    ]
 
 
 cols = st.columns(2)
 with cols[1]:
-    
-
     st.write("### Pixel size")
     st.session_state["pixel_size"] = st.number_input(
         "Please indicate the pixel size of the image in µm (default: 0.13 µm).",
@@ -164,8 +178,8 @@ with cols[1]:
     )
     # In small, lets precise the tehnical details
     st.write(
-        "The pixel size is used to convert the pixel coordinates to µm. " \
-        "The model is trained on images with a pixel size of 0.26 µm, and the application automatically " \
+        "The pixel size is used to convert the pixel coordinates to µm. "
+        "The model is trained on images with a pixel size of 0.26 µm, and the application automatically "
         "resizes the images to match this pixel size using your provided choice."
     )
 
@@ -175,12 +189,14 @@ with cols[1]:
         st.session_state["color1"] = st.color_picker(
             "Select the color for first analog",
             value=st.session_state.get("color1", "#FF0000"),
-            help="This color will be used to display the first analog segments.")
+            help="This color will be used to display the first analog segments.",
+        )
     with color_choices[1]:
         st.session_state["color2"] = st.color_picker(
             "Select the color for second analog",
             value=st.session_state.get("color2", "#00FF00"),
-            help="This color will be used to display the second analog segments.")
+            help="This color will be used to display the second analog segments.",
+        )
 
 with cols[0]:
     choice = st.segmented_control(
@@ -193,4 +209,4 @@ with cols[0]:
     else:
         build_multichannel_loader()
 
-
+    st.data_editor({"Files": st.session_state.get("files_uploaded", [])})

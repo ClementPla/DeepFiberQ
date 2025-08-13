@@ -9,6 +9,8 @@ import albumentations as A
 from monai.inferers import SlidingWindowInferer
 from dnafiber.deployment import _get_model
 from dnafiber.postprocess import refine_segmentation
+import torch.nn as nn
+import ttach as tta
 
 transform = A.Compose(
     [
@@ -52,8 +54,45 @@ def convert_mask_to_image(mask, expand=False):
     return image
 
 
+class Inferer(nn.Module):
+    def __init__(self, model, sliding_window_inferer=None, use_tta=False):
+        super().__init__()
+
+        self.model = nn.Sequential(model, nn.Softmax(dim=1))
+        self.model.eval()
+
+        self.sliding_window_inferer = sliding_window_inferer
+
+        if use_tta:
+            transforms = tta.Compose(
+                [
+                    tta.HorizontalFlip(),
+                    tta.VerticalFlip(),
+                    tta.Scale(scales=[1, 2, 4]),
+                ]
+            )
+            self.model = tta.SegmentationTTAWrapper(
+                self.model, transforms, merge_mode="mean"
+            )
+
+    def forward(self, image):
+        if self.sliding_window_inferer is not None:
+            output = self.sliding_window_inferer(image, self.model)
+        else:
+            output = self.model(image)
+        return output
+
+
 @torch.inference_mode()
-def infer(model, image, device, scale=0.13, to_numpy=True, only_probabilities=False):
+def infer(
+    model,
+    image,
+    device,
+    scale=0.13,
+    use_tta=True,
+    to_numpy=True,
+    only_probabilities=False,
+):
     if isinstance(model, str):
         model = _get_model(device=device, revision=model)
     model_pixel_size = 0.26
@@ -62,26 +101,28 @@ def infer(model, image, device, scale=0.13, to_numpy=True, only_probabilities=Fa
     tensor = transform(image=image)["image"].unsqueeze(0).to(device)
     h, w = tensor.shape[2], tensor.shape[3]
     device = torch.device(device)
-    with torch.autocast(device_type=device.type):
+    sliding_window = None
+    if int(h * scale) > 1024 or int(w * scale) > 1024:
+        sliding_window = SlidingWindowInferer(
+            roi_size=(1024, 1024),
+            sw_batch_size=4,
+            overlap=0.25,
+            mode="gaussian",
+            device=device,
+            progress=True,
+        )
+
+    inferer = Inferer(
+        model=model, sliding_window_inferer=sliding_window, use_tta=use_tta
+    )
+
+    with torch.autocast(device_type=device.type, dtype=None):
         tensor = F.interpolate(
             tensor,
             size=(int(h * scale), int(w * scale)),
             mode="bilinear",
         )
-        if tensor.shape[2] > 1024 or tensor.shape[3] > 1024:
-            inferer = SlidingWindowInferer(
-                roi_size=(1024, 1024),
-                sw_batch_size=4,
-                overlap=0.25,
-                mode="gaussian",
-                device=device,
-                progress=True,
-            )
-            output = inferer(tensor, model)
-        else:
-            output = model(tensor)
-
-        probabilities = F.softmax(output, dim=1)
+        probabilities = inferer(tensor)
         if only_probabilities:
             probabilities = probabilities.cpu()
 

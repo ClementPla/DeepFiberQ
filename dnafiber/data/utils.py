@@ -68,13 +68,20 @@ def preprocess(raw_data, reverse_channels=False):
 
 
 def read_czi(filepath):
-    data = CziFile(filepath)
-   
-    return data.asarray().squeeze()
+    with CziFile(filepath) as czi:
+        data = czi.asarray().squeeze()
+    return data
+
 
 
 def read_tiff(filepath):
-    
     data = imread(filepath).squeeze()
+    return data
 
+
+def read_dv(filepath):
+    from mrc import DVFile
+    with DVFile(filepath) as dv:
+        data = dv.asarray().squeeze()[:2]
+       
     return data

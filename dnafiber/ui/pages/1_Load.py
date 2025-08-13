@@ -14,7 +14,9 @@ def build_loader(key, input_description):
         return
     input_folder = Path(input_folder)
     if input_folder.is_dir():
+
         input_files = list(input_folder.rglob("*.[cC][zZ][iI]"))  # Match CZI files
+        
         input_files += list(input_folder.rglob("*.[tT][iI][fF]"))  # Match TIF files
         input_files += list(
             input_folder.rglob("*.[jJ][pP][eE][gG]")
@@ -26,12 +28,30 @@ def build_loader(key, input_description):
         input_files += list(input_folder.rglob("*.[jJ][pP][gG]"))  # Match JPG files
 
         input_files += list(input_folder.rglob("*.[pP][nN][gG]"))  # Match PNG files
+        # Match DV files
+        input_files += list(input_folder.rglob("*.[dD][vV]"))
 
         # Cast the path to string
         st.session_state[key] += input_files
 
         st.session_state[key] = [f for f in list(set(st.session_state[key]))]
-
+    elif input_folder.is_file():
+        # Check if the extension is valid
+        if input_folder.suffix.lower() in [
+            ".czi",
+            ".tif",
+            ".tiff",
+            ".jpeg",
+            ".jpg",
+            ".png",
+            ".dv",
+        ]:
+            if input_folder not in st.session_state[key]:
+                st.session_state[key].append(input_folder)
+    else:
+        st.error(
+            f"The path {input_folder} is not a valid folder or file. Please enter a valid path."
+        )
 
 def build_multichannel_loader():
     if st.session_state.get("files_uploaded", None) is None:

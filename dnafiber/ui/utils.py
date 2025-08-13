@@ -1,6 +1,6 @@
 import PIL.Image
 import streamlit as st
-from dnafiber.data.utils import read_czi, read_tiff, preprocess
+from dnafiber.data.utils import read_czi, read_tiff, read_dv, preprocess
 import cv2
 import numpy as np
 import math
@@ -29,6 +29,8 @@ def load_image(_filepath):
         return read_czi(_filepath)
     elif filename.endswith(".tif") or filename.endswith(".tiff"):
         return read_tiff(_filepath)
+    elif filename.endswith(".dv"):
+        return read_dv(_filepath)
     elif (
         filename.endswith(".png")
         or filename.endswith(".jpg")
@@ -57,6 +59,7 @@ def get_image_cacheless(filepath, reverse_channel):
         filename.endswith(".czi")
         or filename.endswith(".tif")
         or filename.endswith(".tiff")
+        or filename.endswith(".dv")
     ):
         image = preprocess(image, reverse_channel)
     image = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
@@ -94,7 +97,7 @@ def get_multifile_image(_filepaths):
     return result
 
 
-def numpy_to_base64_png(image_array):
+def numpy_to_base64_jpeg(image_array):
     """
     Encodes a NumPy image array to a base64 string (PNG format).
 
@@ -114,10 +117,10 @@ def numpy_to_base64_png(image_array):
     image.save(buffer, format="jpeg")
 
     # Get the byte data from the buffer
-    png_data = buffer.getvalue()
+    jpeg_data = buffer.getvalue()
 
     # Encode the byte data to base64
-    base64_encoded = base64.b64encode(png_data).decode()
+    base64_encoded = base64.b64encode(jpeg_data).decode()
 
     return f"data:image/jpeg;base64,{base64_encoded}"
 

@@ -1,7 +1,7 @@
 import streamlit as st
 import cv2
 import pandas as pd
-from dnafiber.ui.utils import numpy_to_base64_png
+from dnafiber.ui.utils import numpy_to_base64_jpeg
 import math
 
 @st.cache_data
@@ -77,7 +77,7 @@ def show_fibers_cacheless(_prediction, _image, image_id=None, resolution=400):
             "visualization": "Visualization",
         }
     )
-    df["Visualization"] = df["Visualization"].apply(lambda x: numpy_to_base64_png(x))
+    df["Visualization"] = df["Visualization"].apply(lambda x: numpy_to_base64_jpeg(x))
     return df
 
 

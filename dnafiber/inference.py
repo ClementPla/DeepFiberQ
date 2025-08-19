@@ -4,11 +4,10 @@ import torch
 from torchvision.transforms._functional_tensor import normalize
 import pandas as pd
 from skimage.segmentation import expand_labels
-from skimage.measure import label
 import albumentations as A
 from monai.inferers import SlidingWindowInferer
 from dnafiber.deployment import _get_model
-from dnafiber.postprocess import refine_segmentation
+from dnafiber.model.autopadDPT import AutoPad
 import torch.nn as nn
 import ttach as tta
 
@@ -58,7 +57,7 @@ class Inferer(nn.Module):
     def __init__(self, model, sliding_window_inferer=None, use_tta=False):
         super().__init__()
 
-        self.model = nn.Sequential(model, nn.Softmax(dim=1))
+        self.model = AutoPad(nn.Sequential(model, nn.Softmax(dim=1)), 32)
         self.model.eval()
 
         self.sliding_window_inferer = sliding_window_inferer
@@ -89,7 +88,7 @@ def infer(
     image,
     device,
     scale=0.13,
-    use_tta=True,
+    use_tta=False,
     to_numpy=True,
     only_probabilities=False,
 ):

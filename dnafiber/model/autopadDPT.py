@@ -2,15 +2,16 @@ from torch import nn
 
 
 class AutoPad(nn.Module):
-    def __init__(self, module):
+    def __init__(self, module, divisible_by=14):
         super().__init__()
         self.module = module
+        self.divisible_by = divisible_by
 
     def forward(self, x):
-        # Calculate padding to make input size divisible by 14
+        # Calculate padding to make input size divisible by divisible_by
         height, width = x.shape[2], x.shape[3]
-        pad_h = 14 - height % 14
-        pad_w = 14 - width % 14
+        pad_h = self.divisible_by - height % self.divisible_by
+        pad_w = self.divisible_by - width % self.divisible_by
         padding = (0, pad_w, 0, pad_h)
         x = nn.functional.pad(x, padding)
         # Forward pass through the module

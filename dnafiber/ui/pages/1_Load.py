@@ -8,7 +8,7 @@ st.set_page_config(
 )
 
 
-def build_loader(key, input_description):
+def build_loader(key, input_description, accepted_formats):
     input_folder = st.text_input(input_description)
     if input_folder == "":
         return
@@ -16,9 +16,8 @@ def build_loader(key, input_description):
         input_folder = input_folder[7:]
     input_folder = Path(input_folder)
     if input_folder.is_dir():
-
         input_files = list(input_folder.rglob("*.[cC][zZ][iI]"))  # Match CZI files
-        
+
         input_files += list(input_folder.rglob("*.[tT][iI][fF]"))  # Match TIF files
         input_files += list(
             input_folder.rglob("*.[jJ][pP][eE][gG]")
@@ -39,15 +38,7 @@ def build_loader(key, input_description):
         st.session_state[key] = [f for f in list(set(st.session_state[key]))]
     elif input_folder.is_file():
         # Check if the extension is valid
-        if input_folder.suffix.lower() in [
-            ".czi",
-            ".tif",
-            ".tiff",
-            ".jpeg",
-            ".jpg",
-            ".png",
-            ".dv",
-        ]:
+        if input_folder.suffix.lower() in accepted_formats:
             if input_folder not in st.session_state[key]:
                 st.session_state[key].append(input_folder)
     else:
@@ -55,43 +46,45 @@ def build_loader(key, input_description):
             f"The path {input_folder} is not a valid folder or file. Please enter a valid path."
         )
 
-def build_multichannel_loader():
+
+def build_multichannel_loader(accepted_formats):
     if st.session_state.get("files_uploaded", None) is None:
         st.session_state["files_uploaded"] = []
     build_loader(
         "files_uploaded",
-        "Enter the path to the folder containing multichannel files",
+        "Enter the path to the folder containing multichannel files. You can also enter an individual file path.",
+        accepted_formats,
     )
 
-    st.write("### Channel interpretation")
-    st.markdown(
-        "The goal is to obtain an RGB image in the order of <span style='color: red;'>First analog</span>, <span style='color: green;'>Second analog</span>, <span style='color: blue;'>Empty</span>.",
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        "By default, we assume that the first channel in CZI/TIFF file is <span style='color: green;'>the second analog</span>, (which happens to be the case in Zeiss microscope) "
-        "which means that we swap the order of the two channels for processing.",
-        unsafe_allow_html=True,
-    )
-    st.write("If this not the intented behavior, please tick the box below:")
-    st.session_state["reverse_channels"] = st.checkbox(
-        "Reverse the channels interpretation",
-        value=False,
-    )
-    st.warning(
-        "Please note that we only swap the channels for raw (CZI, TIFF) files. JPEG and PNG files "
-        "are assumed to be already in the correct order (First analog in red and second analog in green). "
-    )
+    with st.expander("Channel interpretation", expanded=False):
+        st.markdown(
+            "The goal is to obtain an RGB image in the order of <span style='color: red;'>First analog</span>, <span style='color: green;'>Second analog</span>, <span style='color: blue;'>Empty</span>.",
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            "By default, we assume that the first channel in CZI/TIFF file is <span style='color: green;'>the second analog</span>, (which happens to be the case in Zeiss microscope) "
+            "which means that we swap the order of the first two channels for processing.",
+            unsafe_allow_html=True,
+        )
+        st.write("If this not the intended behavior, please tick the box below:")
+        st.session_state["reverse_channels"] = st.checkbox(
+            "Reverse the channels interpretation",
+            value=False,
+        )
+        st.warning(
+            "Please note that we only swap the channels for raw (CZI, TIFF) files. JPEG and PNG files "
+            "are assumed to be already in the correct order (First analog in red and second analog in green). "
+        )
 
-    st.info(
-        ""
-        "The channels order in CZI files does not necessarily match the order in which they are displayed in ImageJ or equivalent. "
-        "Indeed, such viewers will usually look at the metadata of the file to determine the order of the channels, which we don't. "
-        "In doubt, we recommend visualizing the image in ImageJ and compare with our viewer. If the channels appear reversed, tick the option above."
-    )
+        st.info(
+            ""
+            "The channels order in CZI files does not necessarily match the order in which they are displayed in ImageJ or equivalent. "
+            "Indeed, such viewers will usually look at the metadata of the file to determine the order of the channels, which we don't. "
+            "In doubt, we recommend visualizing the image in ImageJ and compare with our viewer. If the channels appear reversed, tick the option above."
+        )
 
 
-def build_individual_loader():
+def build_individual_loader(accepted_formats):
     cols = st.columns(2)
     with cols[1]:
         st.markdown(
@@ -103,6 +96,7 @@ def build_individual_loader():
         build_loader(
             "analog_2_files",
             "Enter the path to the folder containing second analog files",
+            accepted_formats,
         )
 
     with cols[0]:
@@ -116,6 +110,7 @@ def build_individual_loader():
         build_loader(
             "analog_1_files",
             "Enter the path to the folder containing first analog files",
+            accepted_formats,
         )
 
     analog_1_files = st.session_state.get("analog_1_files", None)
@@ -198,12 +193,12 @@ with cols[1]:
         "Please indicate the pixel size of the image in µm (default: 0.13 µm).",
         value=st.session_state.get("pixel_size", 0.13),
     )
-    # In small, lets precise the tehnical details
-    st.write(
-        "The pixel size is used to convert the pixel coordinates to µm. "
-        "The model is trained on images with a pixel size of 0.26 µm, and the application automatically "
-        "resizes the images to match this pixel size using your provided choice."
-    )
+    with st.expander("About pixel size", expanded=False):
+        st.write(
+            "The pixel size is used to convert the pixel coordinates to µm. "
+            "The model is trained on images with a pixel size of 0.26 µm, and the application automatically "
+            "resizes the images to match this pixel size using your provided choice."
+        )
 
     st.write("### Labels color")
     color_choices = st.columns(2)
@@ -221,19 +216,25 @@ with cols[1]:
         )
 
 with cols[0]:
+    accepted_formats = st.segmented_control(
+        "Please select the accepted file formats:",
+        options=[".czi", ".tif", ".tiff", ".dv", ".png", ".jpg", ".jpeg"],
+        default=[".czi", ".tif", ".tiff", ".dv", ".png", ".jpg", ".jpeg"],
+        format_func=lambda x: x.upper().replace(".", ""),
+        selection_mode="multi",
+    )
     choice = st.segmented_control(
         "Please select the type of images you want to upload:",
         options=["Multichannel", "Individual channel"],
         default="Multichannel",
     )
     if choice == "Individual channel":
-        build_individual_loader()
+        build_individual_loader(accepted_formats)
     else:
-        build_multichannel_loader()
+        build_multichannel_loader(accepted_formats)
 
 with st.sidebar:
     clear_stack = st.button("Clear all uploaded files")
     if clear_stack:
-        st.session_state["files_uploaded"] = []    
+        st.session_state["files_uploaded"] = []
     st.data_editor({"Files": st.session_state.get("files_uploaded", [])})
-

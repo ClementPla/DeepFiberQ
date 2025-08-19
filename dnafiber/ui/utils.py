@@ -3,12 +3,9 @@ import streamlit as st
 from dnafiber.data.utils import read_czi, read_tiff, read_dv, preprocess
 import cv2
 import numpy as np
-import math
-from dnafiber.deployment import _get_model
 import PIL
-from PIL import Image
-import io
-import base64
+
+from dnafiber.trainee import Trainee
 
 MAX_WIDTH = 1024
 MAX_HEIGHT = 1024
@@ -21,6 +18,24 @@ TYPE_MAPPING = {
     3: "TRICOLOR",
     4: "MULTICOLOR",
 }
+
+@st.cache_resource
+def get_model(device, revision=None):
+    return _get_model(revision=revision, device=device)
+
+
+
+def _get_model(revision, device="cuda"):
+    if revision is None:
+        model = Trainee.from_pretrained(
+            "ClementP/DeepFiberQ", arch="unet", encoder_name="mit_b0"
+        )
+    else:
+        model = Trainee.from_pretrained(
+            "ClementP/DeepFiberQ",
+            revision=revision,
+        )
+    return model.eval().to(device)
 
 
 def load_image(_filepath):
@@ -97,34 +112,6 @@ def get_multifile_image(_filepaths):
     return result
 
 
-def numpy_to_base64_jpeg(image_array):
-    """
-    Encodes a NumPy image array to a base64 string (PNG format).
-
-    Args:
-        image_array: A NumPy array representing the image.
-
-    Returns:
-        A base64 string representing the PNG image.
-    """
-    # Convert NumPy array to PIL Image
-    image = Image.fromarray(image_array)
-
-    # Create an in-memory binary stream
-    buffer = io.BytesIO()
-
-    # Save the image to the buffer in PNG format
-    image.save(buffer, format="jpeg")
-
-    # Get the byte data from the buffer
-    jpeg_data = buffer.getvalue()
-
-    # Encode the byte data to base64
-    base64_encoded = base64.b64encode(jpeg_data).decode()
-
-    return f"data:image/jpeg;base64,{base64_encoded}"
-
-
 @st.cache_data
 def get_resized_image(_image, id):
     h, w = _image.shape[:2]
@@ -161,29 +148,4 @@ def bokeh_imshow(fig, image):
     fig.image_rgba(image=[img], x=0, y=0, dw=image.shape[1], dh=image.shape[0])
 
 
-@st.cache_resource
-def get_model(device, revision=None):
-    return _get_model(revision=revision, device=device)
 
-
-def pad_image_to_croppable(_image, bx, by, uid=None):
-    # Pad the image to be divisible by bx and by
-    h, w = _image.shape[:2]
-    if h % bx != 0:
-        pad_h = bx - (h % bx)
-    else:
-        pad_h = 0
-    if w % by != 0:
-        pad_w = by - (w % by)
-    else:
-        pad_w = 0
-    _image = cv2.copyMakeBorder(
-        _image,
-        math.ceil(pad_h / 2),
-        math.floor(pad_h / 2),
-        math.ceil(pad_w / 2),
-        math.floor(pad_w / 2),
-        cv2.BORDER_CONSTANT,
-        value=(0, 0, 0),
-    )
-    return _image

@@ -1,14 +1,14 @@
 import streamlit as st
 import cv2
 import pandas as pd
-from dnafiber.ui.utils import numpy_to_base64_jpeg
+from dnafiber.data.utils import numpy_to_base64_jpeg
 import math
 
 @st.cache_data
-def show_fibers(_prediction, _image, image_id=None, resolution=400):
-    return show_fibers_cacheless(_prediction, _image, image_id=image_id)
-    
-def show_fibers_cacheless(_prediction, _image, image_id=None, resolution=400):
+def show_fibers(_prediction, _image, image_id=None, resolution=400, show_errors=True):
+    return show_fibers_cacheless(_prediction, _image, image_id=image_id, resolution=resolution, show_errors=show_errors)
+
+def show_fibers_cacheless(_prediction, _image, image_id=None, resolution=400, show_errors=True):
     data = dict(
         fiber_id=[],
         firstAnalog=[],
@@ -16,9 +16,12 @@ def show_fibers_cacheless(_prediction, _image, image_id=None, resolution=400):
         ratio=[],
         fiber_type=[],
         visualization=[],
+        is_valid=[],
     )
 
     for fiber in _prediction:
+        if not show_errors and not fiber.is_valid:
+            continue
         data["fiber_id"].append(fiber.fiber_id)
         r, g = fiber.counts
         red_length = st.session_state["pixel_size"] * r
@@ -27,6 +30,7 @@ def show_fibers_cacheless(_prediction, _image, image_id=None, resolution=400):
         data["secondAnalog"].append(f"{green_length:.3f} ")
         data["ratio"].append(f"{green_length / red_length:.3f}")
         data["fiber_type"].append(fiber.fiber_type)
+        data["is_valid"].append(fiber.is_valid)
 
         x, y, w, h = fiber.bbox
 
@@ -37,6 +41,9 @@ def show_fibers_cacheless(_prediction, _image, image_id=None, resolution=400):
         y = max(0, y - offsetY)
         w += offsetX * 2
         h += offsetY * 2
+
+        # w = max(w, h)
+        # h = max(h, w)
         visu = _image[y : y + h, x : x + w, :]
         visu = cv2.normalize(visu, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
 
@@ -62,6 +69,17 @@ def show_fibers_cacheless(_prediction, _image, image_id=None, resolution=400):
             (0, 0, 255),
             2,
         )
+        # Pad the visualization to have a square image
+        if visu.shape[0] < visu.shape[1]:
+            pad = (visu.shape[1] - visu.shape[0]) // 2
+            visu = cv2.copyMakeBorder(
+                visu, pad, pad, 0, 0, cv2.BORDER_CONSTANT, value=(0, 0, 0)
+            )
+        elif visu.shape[0] > visu.shape[1]:
+            pad = (visu.shape[0] - visu.shape[1]) // 2
+            visu = cv2.copyMakeBorder(
+                visu, 0, 0, pad, pad, cv2.BORDER_CONSTANT, value=(0, 0, 0)
+            )
 
         # Make sure the 
         data["visualization"].append(visu)

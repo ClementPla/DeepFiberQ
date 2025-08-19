@@ -1,10 +1,13 @@
+from PIL import Image
+import io
 import base64
-
 from xml.dom import minidom
 import cv2
 import numpy as np
 from czifile import CziFile
 from tifffile import imread
+import math
+import streamlit as st
 
 
 def read_svg(svg_path):
@@ -85,3 +88,52 @@ def read_dv(filepath):
         data = dv.asarray().squeeze()[:2]
        
     return data
+
+def numpy_to_base64_jpeg(image_array):
+    """
+    Encodes a NumPy image array to a base64 string (PNG format).
+
+    Args:
+        image_array: A NumPy array representing the image.
+
+    Returns:
+        A base64 string representing the PNG image.
+    """
+    # Convert NumPy array to PIL Image
+    image = Image.fromarray(image_array)
+
+    # Create an in-memory binary stream
+    buffer = io.BytesIO()
+
+    # Save the image to the buffer in PNG format
+    image.save(buffer, format="jpeg")
+
+    # Get the byte data from the buffer
+    jpeg_data = buffer.getvalue()
+
+    # Encode the byte data to base64
+    base64_encoded = base64.b64encode(jpeg_data).decode()
+
+    return f"data:image/jpeg;base64,{base64_encoded}"
+@st.cache_data
+def pad_image_to_croppable(_image, bx, by, uid=None):
+    # Pad the image to be divisible by bx and by
+    h, w = _image.shape[:2]
+    if h % bx != 0:
+        pad_h = bx - (h % bx)
+    else:
+        pad_h = 0
+    if w % by != 0:
+        pad_w = by - (w % by)
+    else:
+        pad_w = 0
+    _image = cv2.copyMakeBorder(
+        _image,
+        math.ceil(pad_h / 2),
+        math.floor(pad_h / 2),
+        math.ceil(pad_w / 2),
+        math.floor(pad_w / 2),
+        cv2.BORDER_CONSTANT,
+        value=(0, 0, 0),
+    )
+    return _image

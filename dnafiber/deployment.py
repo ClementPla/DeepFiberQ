@@ -1,20 +1,109 @@
-from dnafiber.trainee import Trainee
-from dnafiber.postprocess.fiber import FiberProps
+import math
+import time
+
+import cv2
 import pandas as pd
+import torch
+from joblib import Parallel, delayed
+
+from dnafiber.postprocess import refine_segmentation
+from dnafiber.postprocess.fiber import FiberProps
+from dnafiber.ui.inference import ui_inference_cacheless
+from dnafiber.data.utils import numpy_to_base64_jpeg
+from dnafiber.ui.utils import (
+    get_image_cacheless,
+    get_multifile_image,
+    _get_model
+)
+
+import numpy as np
 
 
-def _get_model(revision, device="cuda"):
-    if revision is None:
-        model = Trainee.from_pretrained(
-            "ClementP/DeepFiberQ", arch="unet", encoder_name="mit_b0"
-        )
+
+def run_one_file(
+    file,
+    model,
+    reverse_channels=False,
+    elongation_threshold=2,
+    pixel_size=0.13,
+    create_thumbnail=True,
+    include_bbox=False,
+    use_tta=True,
+    include_segmentation=False,
+    verbose=True,
+):
+    is_cuda_available = torch.cuda.is_available()
+    if isinstance(file, np.ndarray):
+        # If the file is already an image array, we don't need to load it
+        image = file
+        filename = "Provided Image"
+    elif isinstance(file, tuple):
+        if file[0] is None:
+            filename = file[1].name
+        if file[1] is None:
+            filename = file[0].name
+        image = get_multifile_image(file)
     else:
-        model = Trainee.from_pretrained(
-            "ClementP/DeepFiberQ",
-            revision=revision,
-            force_download=True,
+        filename = file.name
+        image = get_image_cacheless(file, reverse_channels)
+    start = time.time()
+    prediction = ui_inference_cacheless(
+        _model=model,
+        _image=image,
+        _device="cuda" if is_cuda_available else "cpu",
+        use_tta=use_tta,
+        only_segmentation=True,
+    )
+    if verbose:
+        print(f"Prediction time: {time.time() - start:.2f} seconds for {file.name}")
+    h, w = prediction.shape
+    start = time.time()
+    y_size, x_size = 8192, 8192
+    if h > y_size or w > x_size:
+        # Extract blocks from the prediction
+
+        blocks = [
+            (
+                image[y : y + y_size, x : x + x_size],
+                prediction[y : y + y_size, x : x + x_size],
+                y,
+                x,
+            )
+            for y in range(0, h, y_size)
+            for x in range(0, w, x_size)
+        ]
+
+        parallel_results = Parallel(n_jobs=4, backend="threading")(
+            delayed(refine_segmentation)(
+                block_img,
+                block,
+                elongation_threshold,
+                x,
+                y,
+            )
+            for (block_img, block, y, x) in (blocks)
         )
-    return model.eval().to(device)
+
+        results = [fiber for block_result in parallel_results for fiber in block_result]
+    else:
+        results = refine_segmentation(
+            image,
+            prediction,
+        )
+    if verbose:
+        print(f"Refinement time: {time.time() - start:.2f} seconds for {filename}")
+    results = [fiber for fiber in results if fiber.is_valid]
+    df = format_results_to_dataframe(
+        results,
+        image,
+        resolution=256,
+        include_thumbnails=create_thumbnail,
+        pixel_size=pixel_size,
+        include_bbox=include_bbox,
+        include_segmentation=include_segmentation,
+    )
+    df["image_name"] = filename
+    return df
 
 
 def format_results(results: list[FiberProps], pixel_size: float) -> pd.DataFrame:
@@ -36,8 +125,112 @@ def format_results(results: list[FiberProps], pixel_size: float) -> pd.DataFrame
     return pd.DataFrame.from_dict(all_results)
 
 
+def format_results_to_dataframe(
+    _prediction, _image, resolution=400, include_thumbnails=True, pixel_size=0.13, include_bbox=False,
+    include_segmentation=False
+):
+    data = dict(
+        fiber_id=[],
+        firstAnalog=[],
+        secondAnalog=[],
+        ratio=[],
+        fiber_type=[],
+    )
+    if include_thumbnails:
+        data["Visualization"] = []
+        data["Segmentation"] = []
+    if include_bbox:
+        data["bbox"] = []
+    if include_segmentation:
+        data["segmentation"] = []
+    for fiber in _prediction:
+        data["fiber_id"].append(fiber.fiber_id)
+        r, g = fiber.counts
+        red_length = pixel_size * r
+        green_length = pixel_size * g
+        data["firstAnalog"].append(f"{red_length:.3f} ")
+        data["secondAnalog"].append(f"{green_length:.3f} ")
+        data["ratio"].append(f"{green_length / red_length:.3f}")
+        data["fiber_type"].append(fiber.fiber_type)
+        if include_segmentation:
+            data["segmentation"].append(fiber.data)
+        if include_bbox:
+            data["bbox"].append(fiber.bbox)
+
+        if not include_thumbnails:
+            continue
+
+        x, y, w, h = fiber.bbox
+        
+        # Extract a region twice as large as the bbox from the image
+        offsetX = math.floor(w / 2)
+        offsetY = math.floor(h / 2)
+        visu = _image[
+            max(0, y - offsetY) : min(_image.shape[0], y + h + offsetY),
+            max(0, x - offsetX) : min(_image.shape[1], x + w + offsetX),
+        ]
+        
+        # Express the bbox in the same coordinate system as the visualization
+        x = max(0, offsetX)
+        y = max(0, offsetY)
+        
+        # Draw the bbox on the visualization
+        cv2.rectangle(visu, (x, y), (x + w, y + h), (0, 0, 255), 3)
+        segmentation = fiber.data
+        # Scale the visualization to a minimum width of 256 pixels
+
+        if visu.shape[1] != resolution:
+            scale = resolution / visu.shape[1]
+            visu = cv2.resize(
+                visu,
+                None,
+                fx=scale,
+                fy=scale,
+                interpolation=cv2.INTER_LINEAR,
+            )
+            segmentation = cv2.resize(
+                segmentation,
+                None,
+                fx=scale,
+                fy=scale,
+                interpolation=cv2.INTER_NEAREST_EXACT,
+            )
+            offsetX = math.floor(offsetX * scale)
+            offsetY = math.floor(offsetY * scale)
+
+        
+        red_mask = segmentation == 1
+        green_mask = segmentation == 2
+        # Convert the segmentation to a 3-channel image
+        segmentation = cv2.cvtColor(segmentation, cv2.COLOR_GRAY2BGR)
+        # segmentation== 1 is red, segmentation==2 is green
+        segmentation[red_mask] = np.array([255, 0, 0])
+        segmentation[green_mask ] = np.array([0, 255, 0])
+        # Make sure the
+        data["Visualization"].append(visu)
+        data["Segmentation"].append(segmentation)
+    df = pd.DataFrame(data)
+    df = df.rename(
+        columns={
+            "firstAnalog": "First analog (µm)",
+            "secondAnalog": "Second analog (µm)",
+            "ratio": "Ratio",
+            "fiber_type": "Fiber type",
+            "fiber_id": "Fiber ID",
+        }
+    )
+    if include_thumbnails:
+        df["Visualization"] = df["Visualization"].apply(
+            lambda x: numpy_to_base64_jpeg(x)
+        )
+        df["Segmentation"] = df["Segmentation"].apply(
+            lambda x: numpy_to_base64_jpeg(x)
+        )
+    return df
+
+
 MODELS_ZOO = {
+    "U-Net ResNet50x4_clip": "unet_tu-resnet50x4_clip",
     "Ensemble": "ensemble",
     "U-Net SE-ResNet50": "unet_se_resnet50",
-    "U-Net ResNet50x4_clip": "unet_tu-resnet50x4_clip",
 }

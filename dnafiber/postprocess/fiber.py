@@ -32,6 +32,7 @@ class FiberProps:
     red_pixels: int = None
     green_pixels: int = None
     category: str = None
+    is_valid: bool = True
 
     @property
     def bbox(self):

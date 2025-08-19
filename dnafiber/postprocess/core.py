@@ -12,6 +12,7 @@ from dnafiber.postprocess.fiber import Fiber, FiberProps, Bbox
 from itertools import compress
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
+from dnafiber.postprocess.error_detection import correct_fibers
 
 cmlabel = ListedColormap(["black", "red", "green"])
 
@@ -267,14 +268,17 @@ def extract_fibers(
     return fiberprops
 
 
-def refine_segmentation(image, segmentation, threshold=2, x_offset=0, y_offset=0):
+def refine_segmentation(image, segmentation, x_offset=0, y_offset=0, correction_model=None, device=None):
     skeleton = skeletonize(segmentation > 0, method="zhang").astype(np.uint8)
     skeleton_gt = skeleton * segmentation
 
-    return extract_fibers(
+    fibers = extract_fibers(
         skeleton,
         skeleton_gt,
         post_process=True,
         x_offset=x_offset,
         y_offset=y_offset,
     )
+    if correction_model is not None:
+        fibers = correct_fibers(fibers, image, correction_model=correction_model, device=device)
+    return fibers

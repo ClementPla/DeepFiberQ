@@ -12,6 +12,8 @@ def build_loader(key, input_description):
     input_folder = st.text_input(input_description)
     if input_folder == "":
         return
+    if input_folder.startswith("file://"):
+        input_folder = input_folder[7:]
     input_folder = Path(input_folder)
     if input_folder.is_dir():
 
@@ -229,4 +231,9 @@ with cols[0]:
     else:
         build_multichannel_loader()
 
+with st.sidebar:
+    clear_stack = st.button("Clear all uploaded files")
+    if clear_stack:
+        st.session_state["files_uploaded"] = []    
     st.data_editor({"Files": st.session_state.get("files_uploaded", [])})
+

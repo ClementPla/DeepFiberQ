@@ -7,11 +7,11 @@ from dnafiber.ui.utils import (
     get_multifile_image,
     get_resized_image,
     bokeh_imshow,
-    pad_image_to_croppable,
 )
-from dnafiber.ui.components import show_fibers, table_components
+from dnafiber.data.utils import pad_image_to_croppable
+from dnafiber.ui.components import show_fibers, table_components,show_fibers_cacheless
 from dnafiber.deployment import MODELS_ZOO
-from dnafiber.ui.inference import ui_inference, get_model
+from dnafiber.ui.inference import ui_inference, ui_inference_cacheless, get_model
 from skimage.util import view_as_blocks
 import cv2
 import math
@@ -24,7 +24,6 @@ from catppuccin import PALETTE
 import numpy as np
 import torch
 from skimage.segmentation import expand_labels
-import pandas as pd
 
 st.set_page_config(
     layout="wide",
@@ -33,7 +32,7 @@ st.set_page_config(
 st.title("Viewer")
 
 
-def display_prediction(_prediction, _image, image_id=None):
+def display_prediction(_prediction, _image, image_id=None, show_errors=True):
     max_width = 2048
     image = _image
     if image.max() > 25:
@@ -53,6 +52,8 @@ def display_prediction(_prediction, _image, image_id=None):
     h, w = image.shape[:2]
     labels_maps = np.zeros((h, w), dtype=np.uint8)
     for i, region in enumerate(_prediction):
+        if not show_errors and not region.is_valid:
+            continue
         x, y, w, h = region.scaled_coordinates(scale)
         data = cv2.resize(
             expand_labels(region.data, 1),
@@ -66,11 +67,10 @@ def display_prediction(_prediction, _image, image_id=None):
             x : x + data.shape[1],
         ][data > 0] = data[data > 0]
     p1 = figure(
-        width=600,
         x_range=Range1d(-image.shape[1] / 8, image.shape[1] * 1.125, bounds="auto"),
         y_range=Range1d(image.shape[0] * 1.125, -image.shape[0] / 8, bounds="auto"),
-        title=f"Detected fibers: {len(_prediction)}",
-        tools="pan,wheel_zoom,box_zoom,reset",
+        title=f"Detected fibers: {len(_prediction)} ({sum([1 for r in _prediction if not r.is_valid])} filtered)",
+        tools="pan,wheel_zoom,box_zoom,reset,save",
         active_scroll="wheel_zoom",
     )
 
@@ -87,8 +87,7 @@ def display_prediction(_prediction, _image, image_id=None):
     p2 = figure(
         x_range=p1.x_range,
         y_range=p1.y_range,
-        width=600,
-        tools="pan,wheel_zoom,box_zoom,reset",
+        tools="pan,wheel_zoom,box_zoom,reset,save",
         active_scroll="wheel_zoom",
     )
     bokeh_imshow(p2, image)
@@ -102,19 +101,25 @@ def display_prediction(_prediction, _image, image_id=None):
         firstAnalog=[],
         secondAnalog=[],
         ratio=[],
+        fill_color=[],
         fiber_id=[],
+        line_width=[],
     )
     np.random.shuffle(colors)
     for i, region in enumerate(_prediction):
+        if not show_errors and not region.is_valid:
+            continue
         color = colors[i % len(colors)]
         x, y, w, h = region.scaled_coordinates(scale)
-
+        is_valid = region.is_valid
         fiberId = region.fiber_id
         data_source["x"].append((x + w / 2))
         data_source["y"].append((y + h / 2))
         data_source["width"].append(w)
         data_source["height"].append(h)
-        data_source["color"].append(color)
+        data_source["color"].append(color if is_valid else "#ffffff")
+        data_source["line_width"].append(2 if is_valid else 3)
+        data_source["fill_color"].append("#ffffff00" if is_valid else ("#ff0000b2"))
         r, g = region.counts
         red_length = st.session_state["pixel_size"] * r / scale
         green_length = st.session_state["pixel_size"] * g / scale
@@ -129,8 +134,9 @@ def display_prediction(_prediction, _image, image_id=None):
         width="width",
         height="height",
         source=data_source,
-        fill_color=None,
+        fill_color="fill_color",
         line_color="color",
+        line_width="line_width",
     )
     rect2 = p2.rect(
         x="x",
@@ -140,6 +146,7 @@ def display_prediction(_prediction, _image, image_id=None):
         source=data_source,
         fill_color=None,
         line_color="color",
+        line_width="line_width",
     )
 
     hover = HoverTool(
@@ -162,7 +169,7 @@ def display_prediction(_prediction, _image, image_id=None):
     return fig
 
 
-def start_inference(use_tta=True):
+def start_inference(use_tta=True, use_correction=True):
     image = st.session_state.image_inference
     image = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
 
@@ -179,18 +186,23 @@ def start_inference(use_tta=True):
         image,
         "cuda" if torch.cuda.is_available() else "cpu",
         use_tta=use_tta,
-        threshold=0,
+        use_correction=use_correction,
         id=st.session_state.image_id,
     )
+
     prediction = [
         p
         for p in prediction
         if (p.fiber_type != "single") and p.fiber_type != "multiple"
     ]
+    show_errors = st.checkbox(
+        "Show fibers with errors",
+        value=True,
+        help="Show fibers that were filtered out by the error detection model.",
+    )
     tab_viewer, tab_fibers = st.tabs(["Viewer", "Fibers"])
-
     with tab_fibers:
-        df = show_fibers(prediction, image, st.session_state.image_id)
+        df = show_fibers_cacheless(_prediction=prediction, _image=image, image_id=st.session_state.image_id, show_errors=show_errors)
         table_components(df)
 
     with tab_viewer:
@@ -202,6 +214,7 @@ def start_inference(use_tta=True):
             _prediction=prediction,
             _image=image,
             image_id=st.session_state.image_id,
+            show_errors=show_errors,
         )
         streamlit_bokeh(fig, use_container_width=True)
 
@@ -264,7 +277,7 @@ if on_session_start():
     index = displayed_names.index(selected_file)
     file = files[index]
     if isinstance(file, tuple):
-        file_id = str(file[0])
+        file_id = str(hash(file[0]))
         if file[0] is None or file[1] is None:
             missing = "First analog" if file[0] is None else "Second analog"
             st.warning(
@@ -273,12 +286,14 @@ if on_session_start():
             )
         image = get_multifile_image(file)
     else:
-        file_id = str(file)
+        file_id = str(hash(file))   
         image = get_image(
             file,
             reverse_channel=st.session_state.get("reverse_channels", False),
             id=file_id,
         )
+    
+
     h, w = image.shape[:2]
     with st.sidebar:
         st.metric(
@@ -299,7 +314,7 @@ if on_session_start():
         block_size = w
 
     bx = by = block_size
-    image = pad_image_to_croppable(image, bx, by, file_id + str(bx) + str(by))
+    image = pad_image_to_croppable(image, bx, by, uid=file_id + str(bx) + str(by))
     thumbnail = get_resized_image(image, file_id)
 
     blocks = view_as_blocks(image, (bx, by, 3))
@@ -315,8 +330,14 @@ if on_session_start():
 
             use_tta = st.checkbox(
                 "Use test time augmentation (TTA)",
-                value=True,
+                value=False,
                 help="Use test time augmentation to improve segmentation results.",
+            )
+
+            detect_errors = st.checkbox(
+                "Use error detection and filtering",
+                value=True,
+                help="Use the error detection and filtering model to improve detection results.",
             )
 
             col1, col2 = st.columns(2)
@@ -396,12 +417,12 @@ if on_session_start():
     st.session_state.image_inference = image
     st.session_state.image_id = (
         (file_id + str(which_x) + str(which_y) + str(bx) + str(by) + str(model_name))
-        + "_use_tta"
+        + ("_use_tta"
         if use_tta
-        else "_no_tta"
+        else "_no_tta")
     )
     col1, col2, col3 = st.columns([1, 1, 1])
-    start_inference(use_tta=use_tta)
+    start_inference(use_tta=use_tta, use_correction=detect_errors)
 else:
     st.switch_page("pages/1_Load.py")
 

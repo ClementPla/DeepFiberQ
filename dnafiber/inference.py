@@ -6,7 +6,7 @@ import pandas as pd
 from skimage.segmentation import expand_labels
 import albumentations as A
 from monai.inferers import SlidingWindowInferer
-from dnafiber.deployment import _get_model
+from dnafiber.ui.utils import _get_model
 from dnafiber.model.autopadDPT import AutoPad
 import torch.nn as nn
 import ttach as tta
@@ -67,7 +67,6 @@ class Inferer(nn.Module):
                 [
                     tta.HorizontalFlip(),
                     tta.VerticalFlip(),
-                    tta.Scale(scales=[1, 2, 4]),
                 ]
             )
             self.model = tta.SegmentationTTAWrapper(
@@ -101,9 +100,9 @@ def infer(
     h, w = tensor.shape[2], tensor.shape[3]
     device = torch.device(device)
     sliding_window = None
-    if int(h * scale) > 1024 or int(w * scale) > 1024:
+    if int(h * scale) > 512 or int(w * scale) > 512:
         sliding_window = SlidingWindowInferer(
-            roi_size=(1024, 1024),
+            roi_size=(512, 512),
             sw_batch_size=4,
             overlap=0.25,
             mode="gaussian",

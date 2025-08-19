@@ -6,18 +6,24 @@ from dnafiber.postprocess.fiber import FiberProps
 from skimage.segmentation import expand_labels
 import streamlit as st
 import albumentations as A
+import torch.nn as nn
+from huggingface_hub import PyTorchModelHubMixin
 
+
+class MyModel(nn.Module, PyTorchModelHubMixin):
+    def __init__(self):
+        super().__init__()
+        self.model = timm.create_model("seresnet50.a1_in1k",
+                                       pretrained=False,
+            num_classes=1,
+            in_chans=4,
+        )
+    def forward(self, x):
+        return self.model(x)
+    
 @st.cache_resource
 def load_model():
-    model = timm.create_model(
-                "seresnet50.a1_in1k",
-                pretrained=False,
-                num_classes=1,
-                in_chans=4,
-            )
-    model.load_state_dict(torch.load("/home/clement/Documents/Projets/DeepFiberQ/checkpoints/corrections/best_model_epoch_30.pth"))
-    return model
-
+    return MyModel.from_pretrained("ClementP/dnafiber-error-detection")
 
 def generate_thumbnail(image, fibers: list[FiberProps]):
     normalize = A.Normalize(

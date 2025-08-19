@@ -12,7 +12,7 @@ def _get_model(revision, device="cuda"):
         model = Trainee.from_pretrained(
             "ClementP/DeepFiberQ",
             revision=revision,
-            force_download=True,
+            force_download=False,
         )
     return model.eval().to(device)
 
@@ -37,7 +37,6 @@ def format_results(results: list[FiberProps], pixel_size: float) -> pd.DataFrame
 
 
 MODELS_ZOO = {
-    "Ensemble": "ensemble",
     "U-Net SE-ResNet50": "unet_se_resnet50",
     "U-Net ResNet50x4_clip": "unet_tu-resnet50x4_clip",
 }

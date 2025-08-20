@@ -27,7 +27,7 @@
      showgrid="false"
      inkscape:zoom="2.4667715"
      inkscape:cx="321.47282"
-     inkscape:cy="661.79619"
+     inkscape:cy="726.6583"
      inkscape:window-width="1920"
      inkscape:window-height="1008"
      inkscape:window-x="0"
@@ -1581,8 +1581,8 @@
        x="37.910854"
        y="113.31198"
        inkscape:export-filename="../post_process_step/1.png"
-       inkscape:export-xdpi="108.76"
-       inkscape:export-ydpi="108.76" /><rect
+       inkscape:export-xdpi="346.47766"
+       inkscape:export-ydpi="346.47766" /><rect
        style="fill:none;fill-opacity:1;stroke:#858392;stroke-width:0.01999994;stroke-dasharray:none;stroke-opacity:1;stop-color:#000000"
        id="rect4828"
        width="2.4701307"
@@ -5527,7 +5527,10 @@
        width="2.4701307"
        height="2.452626"
        x="77.654472"
-       y="147.80908" /><rect
+       y="147.80908"
+       inkscape:export-filename="../post_process_step/2.png"
+       inkscape:export-xdpi="346.47772"
+       inkscape:export-ydpi="346.47772" /><rect
        style="fill:none;fill-opacity:1;stroke:#858392;stroke-width:0.01999994;stroke-dasharray:none;stroke-opacity:1;stop-color:#000000"
        id="rect6915"
        width="2.4701307"
@@ -7311,7 +7314,10 @@
        width="2.4701307"
        height="2.452626"
        x="37.89819"
-       y="182.30617" /><rect
+       y="182.30617"
+       inkscape:export-filename="../post_process_step/3.png"
+       inkscape:export-xdpi="346.47766"
+       inkscape:export-ydpi="346.47766" /><rect
        style="fill:none;fill-opacity:1;stroke:#858392;stroke-width:0.01999994;stroke-dasharray:none;stroke-opacity:1;stop-color:#000000"
        id="rect7695"
        width="2.4701307"
@@ -9143,7 +9149,10 @@
        width="2.4701307"
        height="2.452626"
        x="77.654465"
-       y="182.30617" /><rect
+       y="182.30617"
+       inkscape:export-filename="../post_process_step/4.png"
+       inkscape:export-xdpi="342.68314"
+       inkscape:export-ydpi="342.68314" /><rect
        style="fill:none;fill-opacity:1;stroke:#858392;stroke-width:0.01999994;stroke-dasharray:none;stroke-opacity:1;stop-color:#000000"
        id="rect8498"
        width="2.4701307"

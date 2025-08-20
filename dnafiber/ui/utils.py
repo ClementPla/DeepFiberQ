@@ -19,21 +19,22 @@ TYPE_MAPPING = {
     4: "MULTICOLOR",
 }
 
+
 @st.cache_resource
 def get_model(device, revision=None):
     return _get_model(revision=revision, device=device)
 
 
-
 def _get_model(revision, device="cuda"):
     if revision is None:
         model = Trainee.from_pretrained(
-            "ClementP/DeepFiberQ", arch="unet", encoder_name="mit_b0"
+            "ClementP/DeepFiberQV2", arch="unet", encoder_name="mit_b0"
         )
     else:
         model = Trainee.from_pretrained(
-            "ClementP/DeepFiberQ",
+            "ClementP/DeepFiberQV2",
             revision=revision,
+            force_download=True,
         )
     return model.eval().to(device)
 
@@ -146,6 +147,3 @@ def bokeh_imshow(fig, image):
     view[:, :, 2] = image[:, :, 2]
     view[:, :, 3] = 255  # Alpha channel
     fig.image_rgba(image=[img], x=0, y=0, dw=image.shape[1], dh=image.shape[0])
-
-
-

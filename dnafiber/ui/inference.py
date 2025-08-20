@@ -5,10 +5,29 @@ import numpy as np
 from dnafiber.ui.utils import _get_model
 import torch
 from dnafiber.postprocess.error_detection import load_model
+from skimage.segmentation import expand_labels
+from skimage.morphology import binary_closing, remove_small_objects
 
-@st.cache_data
-def ui_inference(_model, _image, _device, use_tta=True, use_correction=True, id=None):
-    return ui_inference_cacheless(_model, _image, _device, use_tta=use_tta, use_correction=use_correction)
+
+@st.cache_resource
+def ui_inference(
+    _model,
+    _image,
+    _device,
+    use_tta=True,
+    use_correction=True,
+    prediction_threshold=1 / 3,
+    id=None,
+):
+    return ui_inference_cacheless(
+        _model,
+        _image,
+        _device,
+        pixel_size=st.session_state.get("pixel_size", 0.13),
+        use_tta=use_tta,
+        prediction_threshold=prediction_threshold,
+        use_correction=use_correction,
+    )
 
 
 @st.cache_resource
@@ -21,7 +40,14 @@ def get_model(model_name):
 
 
 def ui_inference_cacheless(
-    _model, _image, _device, use_tta=True, only_segmentation=False, use_correction=None
+    _model,
+    _image,
+    _device,
+    pixel_size,
+    use_tta=True,
+    only_segmentation=False,
+    use_correction=None,
+    prediction_threshold=1 / 3,
 ):
     """
     A cacheless version of the ui_inference function.
@@ -39,13 +65,14 @@ def ui_inference_cacheless(
                 with st.spinner(text="Segmenting with model: {}".format(model)):
                     if isinstance(model, str):
                         model = get_model(model)
+                        model.eval()
                     if output is None:
                         output = infer(
                             model,
                             image=_image,
                             device=_device,
                             use_tta=use_tta,
-                            scale=st.session_state.get("pixel_size", 0.13),
+                            scale=pixel_size,
                             only_probabilities=True,
                         ).cpu()
                     else:
@@ -56,21 +83,39 @@ def ui_inference_cacheless(
                                 image=_image,
                                 device=_device,
                                 use_tta=use_tta,
-                                scale=st.session_state.get("pixel_size", 0.13),
+                                scale=pixel_size,
                                 only_probabilities=True,
                             ).cpu()
                         )
-            output = (output / len(_model)).argmax(1).squeeze().numpy()
+            output = output / len(_model)
+
         else:
             output = infer(
                 _model,
                 image=_image,
                 device=_device,
-                scale=st.session_state.get("pixel_size", 0.13),
+                scale=pixel_size,
+                use_tta=use_tta,
+                only_probabilities=True,
             )
+
+        output = output.cpu().numpy()
+
+        pos_prob = 1 - output[0, 0, :, :]
+
+        pos_prob = binary_closing(pos_prob >= prediction_threshold, np.ones((5, 5)))
+        pos_prob = remove_small_objects(pos_prob, min_size=100)
+
+        output[0, 0, pos_prob > 0] = 0
+        output[0, 0, pos_prob == 0] = 1
+
+        output = np.argmax(output, axis=1).squeeze()
     output = output.astype(np.uint8)
+    # output = expand_labels(output, distance=5).astype(np.uint8)
     if only_segmentation:
         return output
     with st.spinner("Post-processing segmentation..."):
-        output = refine_segmentation(_image, output, correction_model=correction_model, device=_device)
+        output = refine_segmentation(
+            _image, output, correction_model=correction_model, device=_device
+        )
     return output

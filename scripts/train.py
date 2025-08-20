@@ -2,6 +2,7 @@ from lightning import Trainer
 from lightning.pytorch.callbacks import (
     ModelCheckpoint,
     EarlyStopping,
+    LearningRateMonitor,
     StochasticWeightAveraging,
 )
 from lightning.pytorch.tuner import Tuner
@@ -34,16 +35,15 @@ def train(arch, encoder, use_swa=True):
 
     trainee = traineeClass(**c["training"], **c["model"])
 
-    logger = WandbLogger(
-        project="DeepFiberQ++ Combined-Finetuned", config=c.tracked_params
-    )
+    logger = WandbLogger(project="DeepFiberQ++ V2", config=c.tracked_params)
     try:
         run_name = logger.experiment.name
-        path = Path("checkpoints") / "DeepFiberQ++ Combined-Finetuned" / run_name
+        path = Path("checkpoints") / "DeepFiberQ++ V2" / run_name
     except TypeError:
-        path = Path("checkpoints") / "DeepFiberQ++ Combined-Finetuned" / "default"
+        path = Path("checkpoints") / "DeepFiberQ++ V2" / "default"
 
     callbacks = [
+        LearningRateMonitor(),
         ModelCheckpoint(
             dirpath=path,
             monitor="dice",
@@ -69,8 +69,9 @@ def train(arch, encoder, use_swa=True):
         **c["trainer"],
         callbacks=callbacks,
         logger=logger,
+        sync_batchnorm=True,
         # fast_dev_run=2,
-        strategy=DDPStrategy(find_unused_parameters=True),
+        # strategy=DDPStrategy(find_unused_parameters=True),
     )
 
     tuner = Tuner(trainer=trainer)
@@ -84,7 +85,7 @@ def train(arch, encoder, use_swa=True):
         train_dataloaders=train_dataloader,
         val_dataloaders=val_dataloader,
         early_stop_threshold=None,
-        num_training=100,
+        num_training=50,
     )
     new_lr = lr_finder.suggestion()
     print(f"Suggested learning rate: {new_lr}")

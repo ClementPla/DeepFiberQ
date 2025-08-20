@@ -46,9 +46,10 @@ class Trainee(LightningModule, PyTorchModelHubMixin):
 
         else:
             self.model = smp.create_model(classes=3, **self.model_config)
+
         self.loss = DiceCELoss(
-            to_onehot_y=False,
-            softmax=False,
+            to_onehot_y=True,
+            softmax=True,
             lambda_ce=5.0,
             lambda_dice=5.0,
             label_smoothing=0.1,
@@ -70,25 +71,20 @@ class Trainee(LightningModule, PyTorchModelHubMixin):
         self.save_hyperparameters()
 
     def forward(self, x):
-        yhat = self.model(x)
-        return yhat
+        return self.model(x)
 
     def training_step(self, batch, batch_idx):
         x, y = batch["image"], batch["mask"]
         y = y.clamp(0, 2)
         y_hat = self(x)
         loss = self.get_loss(y_hat, y)
-
         self.log("train_loss", loss)
-
         return loss
 
     def get_loss(self, y_hat, y):
-        y_hat = F.softmax(y_hat, dim=1)
-
-        y = F.one_hot(y.long(), num_classes=3)
-        y = y.permute(0, 3, 1, 2).float()
-        loss = self.loss(y_hat, y)
+        y_hat = torch.nan_to_num(y_hat, nan=0.0, posinf=0.0, neginf=0.0)
+        loss = self.loss(y_hat, y.unsqueeze(1))
+        loss = torch.nan_to_num(loss, nan=0.0, posinf=0.0, neginf=0.0)
         return loss
 
     def validation_step(self, batch, batch_idx):

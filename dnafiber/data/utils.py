@@ -53,7 +53,7 @@ def preprocess(raw_data, reverse_channels=False):
     if raw_data.ndim == 2:
         raw_data = raw_data[np.newaxis, :, :]
     h, w = raw_data.shape[1:3]
-    orders = np.arange(raw_data.shape[0])[::-1]  # Reverse channel order
+    orders = np.arange(raw_data.shape[0])[::-1]  # Reverse channel order by default
     result = np.zeros((h, w, 3), dtype=np.uint8)
 
     for i, chan in enumerate(raw_data):
@@ -62,10 +62,10 @@ def preprocess(raw_data, reverse_channels=False):
         cdf_normalized = cdf / cdf[-1]
         bmax = np.searchsorted(cdf_normalized, 0.99, side="left")
         clip = np.clip(chan, 0, bmax).astype(np.float32)
-        clip =  (clip - clip.min()) / (bmax - clip.min()) * 255
+        clip = (clip - clip.min()) / (bmax - clip.min()) * 255
         result[:, :, orders[i]] = clip
     if reverse_channels:
-    # Reverse channels 0 and 1
+        # Reverse channels 0 and 1
         result = result[:, :, [1, 0, 2]]
     return result
 
@@ -76,7 +76,6 @@ def read_czi(filepath):
     return data
 
 
-
 def read_tiff(filepath):
     data = imread(filepath).squeeze()
     return data
@@ -84,10 +83,12 @@ def read_tiff(filepath):
 
 def read_dv(filepath):
     from mrc import DVFile
+
     with DVFile(filepath) as dv:
         data = dv.asarray().squeeze()[:2]
-       
+
     return data
+
 
 def numpy_to_base64_jpeg(image_array):
     """
@@ -115,6 +116,8 @@ def numpy_to_base64_jpeg(image_array):
     base64_encoded = base64.b64encode(jpeg_data).decode()
 
     return f"data:image/jpeg;base64,{base64_encoded}"
+
+
 @st.cache_data
 def pad_image_to_croppable(_image, bx, by, uid=None):
     # Pad the image to be divisible by bx and by

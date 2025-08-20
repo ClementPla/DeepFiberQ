@@ -11,7 +11,7 @@ from dnafiber.postprocess.fiber import FiberProps
 from dnafiber.ui.inference import ui_inference_cacheless
 from dnafiber.data.utils import numpy_to_base64_jpeg
 from dnafiber.ui.utils import get_image_cacheless, get_multifile_image, _get_model
-
+from dnafiber.postprocess.error_detection import load_model
 import numpy as np
 
 
@@ -19,11 +19,12 @@ def run_one_file(
     file,
     model,
     reverse_channels=False,
-    elongation_threshold=2,
     pixel_size=0.13,
+    prediction_threshold=1 / 3,
     create_thumbnail=True,
     include_bbox=False,
     use_tta=True,
+    use_correction=True,
     include_segmentation=False,
     verbose=True,
 ):
@@ -45,14 +46,19 @@ def run_one_file(
     prediction = ui_inference_cacheless(
         _model=model,
         _image=image,
+        pixel_size=pixel_size,
         _device="cuda" if is_cuda_available else "cpu",
         use_tta=use_tta,
+        use_correction=use_correction,
         only_segmentation=True,
     )
+
     if verbose:
-        print(f"Prediction time: {time.time() - start:.2f} seconds for {file.name}")
+        print(f"Prediction time: {time.time() - start:.2f} seconds for {filename}")
     h, w = prediction.shape
     start = time.time()
+    correction_model = load_model() if use_correction else None
+
     y_size, x_size = 8192, 8192
     if h > y_size or w > x_size:
         # Extract blocks from the prediction
@@ -72,9 +78,10 @@ def run_one_file(
             delayed(refine_segmentation)(
                 block_img,
                 block,
-                elongation_threshold,
                 x,
                 y,
+                correction_model=correction_model,
+                device="cuda" if is_cuda_available else "cpu",
             )
             for (block_img, block, y, x) in (blocks)
         )
@@ -84,10 +91,13 @@ def run_one_file(
         results = refine_segmentation(
             image,
             prediction,
+            correction_model=correction_model,
+            device="cuda" if is_cuda_available else "cpu",
         )
     if verbose:
         print(f"Refinement time: {time.time() - start:.2f} seconds for {filename}")
-    results = [fiber for fiber in results if fiber.is_valid]
+
+    return results
     df = format_results_to_dataframe(
         results,
         image,
@@ -227,5 +237,9 @@ def format_results_to_dataframe(
 
 
 MODELS_ZOO = {
+    "U-Net SE-ResNet101": "unet_se_resnet101",
     "U-Net SE-ResNet50": "unet_se_resnet50",
+    "U-Net EfficientNet B0": "unet_timm-efficientnet-b0",
+    "Segformer MIT B0": "segformer_mit_b0",
+    "Segformer MIT B4": "segformer_mit_b4",
 }

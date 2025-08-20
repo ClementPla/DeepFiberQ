@@ -38,11 +38,11 @@ def to_polar_space(image, mask):
 @D.nntools_wrapper
 def convert_mask(mask):
     output = np.zeros(mask.shape[:2], dtype=np.uint8)
-    output[mask[:, :, 0] > 150] = 1
-    output[mask[:, :, 1] > 150] = 2
+    output[mask[:, :, 0] > 200] = 1
+    output[mask[:, :, 1] > 200] = 2
     binary_mask = output > 0
     skeleton = skeletonize(binary_mask) * output
-    output = expand_labels(skeleton, 3)
+    output = expand_labels(skeleton, 2)
     output = np.clip(output, 0, 2)
     output = output.astype(np.uint8)
     return {"mask": output}
@@ -187,10 +187,10 @@ class FiberDatamodule(LightningDataModule):
                 transforms
                 + [
                     A.Affine(
-                        scale=(0.5, 2),
+                        scale=(0.75, 2),
                         rotate=(-75, 75),
-                        p=0.75,
-                        border_mode=cv2.BORDER_REFLECT101,
+                        p=0.5,
+                        border_mode=cv2.BORDER_CONSTANT,
                         balanced_scale=True,
                         keep_ratio=True,
                         mask_interpolation=cv2.INTER_NEAREST,
@@ -216,8 +216,10 @@ class FiberDatamodule(LightningDataModule):
                         ],
                         p=0.75,
                     ),
-                    A.GaussNoise(std_range=(0.0, 0.05), p=0.2),
+                    A.GaussNoise(std_range=(0.0, 0.1), p=0.5),
+                    A.Blur(blur_limit=(3, 13), p=0.5),
                 ],
+                seed=1234,
                 bbox_params=A.BboxParams(
                     format="pascal_voc", label_fields=["fiber_ids"], min_visibility=0.95
                 )

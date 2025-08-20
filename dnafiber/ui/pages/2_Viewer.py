@@ -9,9 +9,9 @@ from dnafiber.ui.utils import (
     bokeh_imshow,
 )
 from dnafiber.data.utils import pad_image_to_croppable
-from dnafiber.ui.components import show_fibers, table_components,show_fibers_cacheless
+from dnafiber.ui.components import table_components, show_fibers_cacheless
 from dnafiber.deployment import MODELS_ZOO
-from dnafiber.ui.inference import ui_inference, ui_inference_cacheless, get_model
+from dnafiber.ui.inference import ui_inference, get_model
 from skimage.util import view_as_blocks
 import cv2
 import math
@@ -30,6 +30,88 @@ st.set_page_config(
     page_icon=":microscope:",
 )
 st.title("Viewer")
+
+
+def on_session_start():
+    can_start = (
+        st.session_state.get("files_uploaded", None) is not None
+        and len(st.session_state.files_uploaded) > 0
+    )
+
+    if can_start:
+        return can_start
+
+    cldu_exists = (
+        st.session_state.get("files_uploaded_cldu", None) is not None
+        and len(st.session_state.files_uploaded_cldu) > 0
+    )
+    idu_exists = (
+        st.session_state.get("files_uploaded_idu", None) is not None
+        and len(st.session_state.files_uploaded_idu) > 0
+    )
+
+    if cldu_exists and idu_exists:
+        if len(st.session_state.get("files_uploaded_cldu")) != len(
+            st.session_state.get("files_uploaded_idu")
+        ):
+            st.error("Please upload the same number of CldU and IdU files.")
+            return False
+
+
+def start_inference(use_tta=True, use_correction=True, prediction_threshold=1 / 3):
+    image = st.session_state.image_inference
+    image = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+
+    if "ensemble" in st.session_state.model_name:
+        model = []
+        for _ in range(len(MODELS_ZOO)):
+            with st.spinner(f"Loading model {_ + 1}/{len(MODELS_ZOO)}..."):
+                model.append(get_model(MODELS_ZOO[list(MODELS_ZOO.keys())[_]]))
+    else:
+        with st.spinner("Loading model..."):
+            model = get_model(MODELS_ZOO[st.session_state.model_name])
+    prediction = ui_inference(
+        model,
+        image,
+        "cuda" if torch.cuda.is_available() else "cpu",
+        use_tta=use_tta,
+        use_correction=use_correction,
+        prediction_threshold=prediction_threshold,
+        id=st.session_state.image_id,
+    )
+
+    prediction = [
+        p
+        for p in prediction
+        if (p.fiber_type != "single") and p.fiber_type != "multiple"
+    ]
+    show_errors = st.checkbox(
+        "Show fibers with errors",
+        value=True,
+        help="Show fibers that were filtered out by the error detection model.",
+    )
+    tab_viewer, tab_fibers = st.tabs(["Viewer", "Fibers"])
+    with tab_fibers:
+        df = show_fibers_cacheless(
+            _prediction=prediction,
+            _image=image,
+            image_id=st.session_state.image_id,
+            show_errors=show_errors,
+        )
+        table_components(df)
+
+    with tab_viewer:
+        max_width = 2048
+        if image.shape[1] > max_width:
+            st.toast("Images are displayed at a lower resolution of 2048 pixel wide")
+
+        fig = display_prediction(
+            _prediction=prediction,
+            _image=image,
+            image_id=st.session_state.image_id,
+            show_errors=show_errors,
+        )
+        streamlit_bokeh(fig, use_container_width=True)
 
 
 def display_prediction(_prediction, _image, image_id=None, show_errors=True):
@@ -169,82 +251,6 @@ def display_prediction(_prediction, _image, image_id=None, show_errors=True):
     return fig
 
 
-def start_inference(use_tta=True, use_correction=True):
-    image = st.session_state.image_inference
-    image = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-
-    if "ensemble" in st.session_state.model:
-        model = [
-            _ + "_finetuned" if "finetuned" in st.session_state.model else ""
-            for _ in MODELS_ZOO.values()
-            if _ != "ensemble"
-        ]
-    else:
-        model = get_model(st.session_state.model)
-    prediction = ui_inference(
-        model,
-        image,
-        "cuda" if torch.cuda.is_available() else "cpu",
-        use_tta=use_tta,
-        use_correction=use_correction,
-        id=st.session_state.image_id,
-    )
-
-    prediction = [
-        p
-        for p in prediction
-        if (p.fiber_type != "single") and p.fiber_type != "multiple"
-    ]
-    show_errors = st.checkbox(
-        "Show fibers with errors",
-        value=True,
-        help="Show fibers that were filtered out by the error detection model.",
-    )
-    tab_viewer, tab_fibers = st.tabs(["Viewer", "Fibers"])
-    with tab_fibers:
-        df = show_fibers_cacheless(_prediction=prediction, _image=image, image_id=st.session_state.image_id, show_errors=show_errors)
-        table_components(df)
-
-    with tab_viewer:
-        max_width = 2048
-        if image.shape[1] > max_width:
-            st.toast("Images are displayed at a lower resolution of 2048 pixel wide")
-
-        fig = display_prediction(
-            _prediction=prediction,
-            _image=image,
-            image_id=st.session_state.image_id,
-            show_errors=show_errors,
-        )
-        streamlit_bokeh(fig, use_container_width=True)
-
-
-def on_session_start():
-    can_start = (
-        st.session_state.get("files_uploaded", None) is not None
-        and len(st.session_state.files_uploaded) > 0
-    )
-
-    if can_start:
-        return can_start
-
-    cldu_exists = (
-        st.session_state.get("files_uploaded_cldu", None) is not None
-        and len(st.session_state.files_uploaded_cldu) > 0
-    )
-    idu_exists = (
-        st.session_state.get("files_uploaded_idu", None) is not None
-        and len(st.session_state.files_uploaded_idu) > 0
-    )
-
-    if cldu_exists and idu_exists:
-        if len(st.session_state.get("files_uploaded_cldu")) != len(
-            st.session_state.get("files_uploaded_idu")
-        ):
-            st.error("Please upload the same number of CldU and IdU files.")
-            return False
-
-
 def create_display_files(files):
     if files is None or len(files) == 0:
         return "No files uploaded"
@@ -286,13 +292,12 @@ if on_session_start():
             )
         image = get_multifile_image(file)
     else:
-        file_id = str(hash(file))   
+        file_id = str(hash(file))
         image = get_image(
             file,
             reverse_channel=st.session_state.get("reverse_channels", False),
             id=file_id,
         )
-    
 
     h, w = image.shape[:2]
     with st.sidebar:
@@ -321,12 +326,23 @@ if on_session_start():
     x_blocks, y_blocks = blocks.shape[0], blocks.shape[1]
     with st.sidebar:
         with st.expander("Model", expanded=True):
+            use_ensemble = st.checkbox(
+                "Ensemble model",
+                value=False,
+                help="Use all available models to improve segmentation results.",
+            )
             model_name = st.selectbox(
                 "Select a model",
                 list(MODELS_ZOO.keys()),
                 index=0,
                 help="Select a model to use for inference",
+                disabled=use_ensemble,
             )
+            if use_ensemble:
+                st.warning(
+                    "Ensemble model is selected. All available models will be used for inference."
+                )
+                model_name = "ensemble"
 
             use_tta = st.checkbox(
                 "Use test time augmentation (TTA)",
@@ -337,7 +353,16 @@ if on_session_start():
             detect_errors = st.checkbox(
                 "Use error detection and filtering",
                 value=True,
-                help="Use the error detection and filtering model to improve detection results.",
+                help="Use the error filtering model to improve detection results.",
+            )
+
+            prediction_threshold = st.slider(
+                "Prediction threshold",
+                min_value=0.0,
+                max_value=1.0,
+                value=1 / 3,
+                step=0.01,
+                help="Select the prediction threshold for the model. Lower values may increase the number of detected fibers.",
             )
 
             col1, col2 = st.columns(2)
@@ -348,8 +373,6 @@ if on_session_start():
                     "GPU" if torch.cuda.is_available() else "CPU",
                     disabled=True,
                 )
-
-        st.session_state.model = MODELS_ZOO[model_name] + "_finetuned"
 
         which_y = st.session_state.get("which_y", 0)
         which_x = st.session_state.get("which_x", 0)
@@ -414,15 +437,19 @@ if on_session_start():
     with st.sidebar:
         st.image(image, caption="Selected block", use_container_width=True)
 
+    st.session_state.model_name = model_name
     st.session_state.image_inference = image
     st.session_state.image_id = (
         (file_id + str(which_x) + str(which_y) + str(bx) + str(by) + str(model_name))
-        + ("_use_tta"
-        if use_tta
-        else "_no_tta")
+        + ("_use_tta" if use_tta else "_no_tta")
+        + ("_detect_errors" if detect_errors else "_no_detect_errors")
     )
     col1, col2, col3 = st.columns([1, 1, 1])
-    start_inference(use_tta=use_tta, use_correction=detect_errors)
+    start_inference(
+        use_tta=use_tta,
+        use_correction=detect_errors,
+        prediction_threshold=prediction_threshold,
+    )
 else:
     st.switch_page("pages/1_Load.py")
 

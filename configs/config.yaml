@@ -4,7 +4,7 @@ training:
 
 trainer:
   max_epochs: 2000
-  precision: 32
+  precision: 16-mixed
   check_val_every_n_epoch: 25
   accelerator: gpu
   devices: [0, 1]
@@ -23,7 +23,7 @@ model:
 
 data:
   shape: 1024
-  batch_size: 16
+  batch_size: 32
   root_img: /home/clement/Documents/data/DNAFiber/
   crop_size: [512,512]
   use_cache: True

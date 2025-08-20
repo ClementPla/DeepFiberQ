@@ -1,4 +1,3 @@
-import kornia as K
 import torch
 import torchmetrics.functional as F
 from skimage.measure import label
@@ -102,7 +101,6 @@ class DNAFIBERMetric(Metric):
                     common_mask = pred_mask | gt_mask
                     pred_fiber = preds[i][common_mask]
                     gt_fiber = target[i][common_mask]
-                    
 
                     dices = F.dice(
                         pred_fiber,

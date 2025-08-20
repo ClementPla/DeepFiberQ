@@ -12,22 +12,22 @@ HF_TOKEN = os.environ.get("HF_TOKEN")
 @rank_zero_only
 def upload_to_hub(model, arch, encoder):
     hfapi = HfApi()
-    branch_name = f"{arch}_{encoder}_finetuned"
+    branch_name = f"{arch}_{encoder}"
     hfapi.create_repo(
-        "ClementP/DeepFiberQ",
+        "ClementP/DeepFiberQV2",
         token=HF_TOKEN,
         exist_ok=True,
         repo_type="model",
     )
     hfapi.create_branch(
-        "ClementP/DeepFiberQ",
+        "ClementP/DeepFiberQV2",
         branch=branch_name,
         token=HF_TOKEN,
         exist_ok=True,
     )
 
     model.push_to_hub(
-        "ClementP/DeepFiberQ",
+        "ClementP/DeepFiberQV2",
         branch=branch_name,
         token=HF_TOKEN,
     )

@@ -67,10 +67,11 @@ class Inferer(nn.Module):
                 [
                     tta.HorizontalFlip(),
                     tta.VerticalFlip(),
+                    tta.Rotate90(angles=[0, 90, 180, 270]),
                 ]
             )
             self.model = tta.SegmentationTTAWrapper(
-                self.model, transforms, merge_mode="mean"
+                self.model, transforms, merge_mode="gmean"
             )
 
     def forward(self, image):
@@ -100,6 +101,7 @@ def infer(
     h, w = tensor.shape[2], tensor.shape[3]
     device = torch.device(device)
     sliding_window = None
+
     if int(h * scale) > 512 or int(w * scale) > 512:
         sliding_window = SlidingWindowInferer(
             roi_size=(512, 512),
@@ -113,7 +115,6 @@ def infer(
     inferer = Inferer(
         model=model, sliding_window_inferer=sliding_window, use_tta=use_tta
     )
-
     with torch.autocast(device_type=device.type, dtype=None):
         tensor = F.interpolate(
             tensor,
@@ -121,86 +122,11 @@ def infer(
             mode="bilinear",
         )
         probabilities = inferer(tensor)
-        if only_probabilities:
-            probabilities = probabilities.cpu()
+        probabilities = probabilities.cpu()
 
-            probabilities = F.interpolate(
-                probabilities,
-                size=(h, w),
-                mode="bilinear",
-            )
-            return probabilities
-
-        output = F.interpolate(
-            probabilities.argmax(dim=1, keepdim=True).float(),
+        probabilities = F.interpolate(
+            probabilities,
             size=(h, w),
-            mode="nearest",
-        )
-
-    output = output.squeeze().byte()
-    if to_numpy:
-        output = output.cpu().numpy()
-
-    return output
-
-
-def infer_ensemble(
-    model,
-    image,
-    device,
-    scale=0.13,
-    use_tta=True,
-    to_numpy=True,
-    only_probabilities=False,
-):
-    if isinstance(model, str):
-        model = _get_model(device=device, revision=model)
-    model_pixel_size = 0.26
-
-    scale = scale / model_pixel_size
-    tensor = transform(image=image)["image"].unsqueeze(0).to(device)
-    h, w = tensor.shape[2], tensor.shape[3]
-    device = torch.device(device)
-    sliding_window = None
-    if int(h * scale) > 1024 or int(w * scale) > 1024:
-        sliding_window = SlidingWindowInferer(
-            roi_size=(1024, 1024),
-            sw_batch_size=4,
-            overlap=0.25,
-            mode="gaussian",
-            device=device,
-            progress=True,
-        )
-
-    inferer = Inferer(
-        model=model, sliding_window_inferer=sliding_window, use_tta=use_tta
-    )
-
-    with torch.autocast(device_type=device.type, dtype=None):
-        tensor = F.interpolate(
-            tensor,
-            size=(int(h * scale), int(w * scale)),
             mode="bilinear",
         )
-        probabilities = inferer(tensor)
-        if only_probabilities:
-            probabilities = probabilities.cpu()
-
-            probabilities = F.interpolate(
-                probabilities,
-                size=(h, w),
-                mode="bilinear",
-            )
-            return probabilities
-
-        output = F.interpolate(
-            probabilities.argmax(dim=1, keepdim=True).float(),
-            size=(h, w),
-            mode="nearest",
-        )
-
-    output = output.squeeze().byte()
-    if to_numpy:
-        output = output.cpu().numpy()
-
-    return output
+        return probabilities

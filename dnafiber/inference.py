@@ -67,7 +67,7 @@ class Inferer(nn.Module):
                 [
                     tta.HorizontalFlip(),
                     tta.VerticalFlip(),
-                    tta.Rotate90(angles=[0, 90, 180, 270]),
+                    tta.Rotate90(angles=[0, 90, 180]),
                 ]
             )
             self.model = tta.SegmentationTTAWrapper(
@@ -115,7 +115,7 @@ def infer(
     inferer = Inferer(
         model=model, sliding_window_inferer=sliding_window, use_tta=use_tta
     )
-    with torch.autocast(device_type=device.type, dtype=None):
+    with torch.autocast(device_type=device.type):
         tensor = F.interpolate(
             tensor,
             size=(int(h * scale), int(w * scale)),

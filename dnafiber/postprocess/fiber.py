@@ -1,7 +1,9 @@
 import attrs
 import numpy as np
-from typing import Tuple
+from typing import Optional, Tuple
 from dnafiber.postprocess.skan import trace_skeleton
+from skimage.segmentation import expand_labels
+
 
 @attrs.define
 class Bbox:
@@ -32,7 +34,7 @@ class FiberProps:
     red_pixels: int = None
     green_pixels: int = None
     category: str = None
-    is_valid: bool = True
+    is_an_error: bool = False
 
     @property
     def bbox(self):
@@ -90,19 +92,18 @@ class FiberProps:
 
     @property
     def is_valid(self):
-
         try:
             fiber_type = self.fiber_type
         except IndexError:
             # Happens if there is no pixel remaining for this fiber, which indicates it is invalid.
             return False
-        
+
         return (
             fiber_type == "double"
             or fiber_type == "one-two-one"
             or fiber_type == "two-one-two"
-        )
-    
+        ) and not self.is_an_error
+
     def scaled_coordinates(self, scale: float) -> Tuple[int, int]:
         """
         Scale down the coordinates of the fiber's bounding box.
@@ -114,6 +115,81 @@ class FiberProps:
             int(width * scale),
             int(height * scale),
         )
+
+    def bbox_intersect(self, other: Fiber, ratio=0.25) -> bool:
+        """
+        Check if the bounding boxes of two fibers intersect by at least a certain ratio.
+        """
+        x1, y1, w1, h1 = self.bbox
+        x2, y2, w2, h2 = other.bbox
+
+        intersection_area = max(0, min(x1 + w1, x2 + w2) - max(x1, x2)) * max(
+            0, min(y1 + h1, y2 + h2) - max(y1, y2)
+        )
+        self_area = w1 * h1
+        other_area = w2 * h2
+        return (
+            intersection_area / float(self_area + other_area - intersection_area)
+            >= ratio
+        )
+
+
+@attrs.define
+class Fibers:
+    fibers: list[FiberProps]
+
+    def __iter__(self):
+        return iter(self.fibers)
+
+    def __getitem__(self, index):
+        return self.fibers[index]
+
+    def __len__(self):
+        return len(self.fibers)
+
+    def get_labelmap(self, h, w, fiber_width=1):
+        labelmap = np.zeros((h, w), dtype=np.uint8)
+        for fiber in self.fibers:
+            x, y, w, h = fiber.bbox
+            roi = labelmap[y : y + h, x : x + w]
+            binary = fiber.data > 0
+            roi[binary] = fiber.data[binary]
+
+        labelmap = expand_labels(labelmap, fiber_width)
+        return labelmap
+
+    def contains(self, fiber: Fiber, ratio=0.5):
+        for existing_fiber in self.fibers:
+            if existing_fiber.bbox_intersect(fiber, ratio):
+                return True
+        return False
+
+    def append(self, fiber: Fiber):
+        self.fibers.append(fiber)
+
+    def append_if_not_exists(self, fiber: Fiber, ratio=0.5):
+        """
+        Append a fiber to the list if it does not already exist.
+        """
+        if not self.contains(fiber, ratio):
+            self.append(fiber)
+
+    def valid_copy(self):
+        return Fibers([fiber for fiber in self.fibers if fiber.is_valid])
+
+    def union(self, other, ratio=0.5):
+        union = Fibers(self.fibers)
+        for fiber in other:
+            union.append_if_not_exists(fiber, ratio)
+        return union
+
+    def intersection(self, other, ratio=0.5):
+        intersection = Fibers([])
+        for fiber in self.fibers:
+            for other_fiber in other:
+                if fiber.bbox_intersect(other_fiber, ratio):
+                    intersection.append_if_not_exists(fiber, ratio)
+        return intersection
 
 
 def estimate_fiber_category(fiber: np.ndarray) -> str:

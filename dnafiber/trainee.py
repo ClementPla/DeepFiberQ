@@ -1,17 +1,15 @@
 from lightning import LightningModule
 import segmentation_models_pytorch as smp
-from monai.losses.dice import GeneralizedDiceLoss, DiceCELoss
+from monai.losses.dice import DiceCELoss
 from torchmetrics.classification import Dice, JaccardIndex
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torchmetrics import MetricCollection
-import torch.nn.functional as F
 from huggingface_hub import PyTorchModelHubMixin
 import torch
 import torchvision
 from dnafiber.metric import DNAFIBERMetric
 from skimage.measure import label
-from torchvision.transforms import Normalize
 
 
 def _convert_activations(module, from_activation, to_activation):

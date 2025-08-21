@@ -34,7 +34,7 @@ def _get_model(revision, device="cuda"):
         model = Trainee.from_pretrained(
             "ClementP/DeepFiberQV2",
             revision=revision,
-            force_download=True,
+            force_download=False,
         )
     return model.eval().to(device)
 

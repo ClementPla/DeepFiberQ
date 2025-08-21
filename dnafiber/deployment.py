@@ -240,6 +240,16 @@ MODELS_ZOO = {
     "U-Net SE-ResNet101": "unet_se_resnet101",
     "U-Net SE-ResNet50": "unet_se_resnet50",
     "U-Net EfficientNet B0": "unet_timm-efficientnet-b0",
+    "U-Net MobileOne S0": "unet_mobileone_s0",
+    "U-Net MobileOne S1": "unet_mobileone_s1",
     "Segformer MIT B0": "segformer_mit_b0",
     "Segformer MIT B4": "segformer_mit_b4",
 }
+
+
+ENSEMBLE = [
+    "unet_se_resnet101",
+    "segformer_mit_b4",
+    "unet_mobileone_s0",
+    "unet_mobileone_s1",
+]

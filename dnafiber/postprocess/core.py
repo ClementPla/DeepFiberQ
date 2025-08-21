@@ -8,7 +8,7 @@ from scipy.sparse.csgraph import connected_components
 from scipy.sparse import csr_array
 from skimage.morphology import skeletonize
 from dnafiber.postprocess.skan import find_line_intersection, prolongate_endpoints
-from dnafiber.postprocess.fiber import Fiber, FiberProps, Bbox
+from dnafiber.postprocess.fiber import Fiber, FiberProps, Bbox, Fibers
 from itertools import compress
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
@@ -285,4 +285,6 @@ def refine_segmentation(
         fibers = correct_fibers(
             fibers, image, correction_model=correction_model, device=device
         )
+
+    fibers = Fibers(fibers=fibers)
     return fibers

@@ -71,7 +71,7 @@ def train(arch, encoder, use_swa=True):
         logger=logger,
         sync_batchnorm=True,
         # fast_dev_run=2,
-        # strategy=DDPStrategy(find_unused_parameters=True),
+        strategy=DDPStrategy(find_unused_parameters=True),
     )
 
     tuner = Tuner(trainer=trainer)

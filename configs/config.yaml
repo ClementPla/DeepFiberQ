@@ -3,7 +3,7 @@ training:
   weight_decay: 0.0001
 
 trainer:
-  max_epochs: 2000
+  max_epochs: 1000
   precision: 16-mixed
   check_val_every_n_epoch: 25
   accelerator: gpu

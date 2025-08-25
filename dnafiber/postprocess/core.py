@@ -269,7 +269,8 @@ def extract_fibers(
 
 
 def refine_segmentation(
-    image, segmentation, x_offset=0, y_offset=0, correction_model=None, device=None
+    image, segmentation, x_offset=0, y_offset=0, correction_model=None, device=None,
+    verbose=False
 ):
     skeleton = skeletonize(segmentation > 0, method="zhang").astype(np.uint8)
     skeleton_gt = skeleton * segmentation
@@ -283,7 +284,7 @@ def refine_segmentation(
     )
     if correction_model is not None:
         fibers = correct_fibers(
-            fibers, image, correction_model=correction_model, device=device
+            fibers, image, correction_model=correction_model, device=device, verbose=verbose
         )
 
     fibers = Fibers(fibers=fibers)

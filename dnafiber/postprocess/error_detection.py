@@ -29,7 +29,7 @@ def load_model():
     return MyModel.from_pretrained("ClementP/dnafiber-error-detection")
 
 
-def generate_thumbnail(image, fibers: list[FiberProps]):
+def generate_thumbnail(image, fibers: list[FiberProps], verbose=False):
     normalize = A.Normalize(
         mean=[0.485, 0.456, 0.406, 0.229],
         std=[0.229, 0.224, 0.225, 0.225],
@@ -70,8 +70,11 @@ def generate_thumbnail(image, fibers: list[FiberProps]):
 
         # Pad the segmentation mask to match the extended bounding box
         padded_seg = np.zeros_like(img_with_bbox[:, :, 0], dtype=np.uint8)
-        padded_seg[offsetY : offsetY + h, offsetX : offsetX + w] = seg
-
+        try:
+            padded_seg[offsetY : offsetY + h, offsetX : offsetX + w] = seg
+        except ValueError as e:
+            if verbose:
+                print("Failed to extract bbox from fiber data:", e)
         # Resize all the images to a fixed size of 128x128
         img_with_bbox = cv2.resize(img_with_bbox, (128, 128))
         img_with_bbox = normalize(image=img_with_bbox)["image"]
@@ -100,7 +103,7 @@ def error_inference_thumbnails(model, thumbnails: np.ndarray, device="cpu"):
 
 
 def correct_fibers(
-    fibers: list[FiberProps], image: np.ndarray, correction_model=None, device=None
+    fibers: list[FiberProps], image: np.ndarray, correction_model=None, device=None, verbose=False
 ):
     """
     Correct the fibers using the provided correction model.

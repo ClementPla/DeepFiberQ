@@ -16,21 +16,23 @@ def build_loader(key, input_description, accepted_formats):
         input_folder = input_folder[7:]
     input_folder = Path(input_folder)
     if input_folder.is_dir():
-        input_files = list(input_folder.rglob("*.[cC][zZ][iI]"))  # Match CZI files
-
-        input_files += list(input_folder.rglob("*.[tT][iI][fF]"))  # Match TIF files
-        input_files += list(
-            input_folder.rglob("*.[jJ][pP][eE][gG]")
-        )  # Match JPEG files
-
-        input_files += list(
+        input_files = []
+        if '.czi' in accepted_formats:
+            input_files += list(input_folder.rglob("*.[cC][zZ][iI]"))  # Match CZI files
+        if '.tif' in accepted_formats or '.tiff' in accepted_formats:
+            input_files += list(input_folder.rglob("*.[tT][iI][fF]"))
+            input_files += list(
             input_folder.rglob("*.[tT][iI][fF][fF]")
         )  # Match TIFF files
-        input_files += list(input_folder.rglob("*.[jJ][pP][gG]"))  # Match JPG files
-
-        input_files += list(input_folder.rglob("*.[pP][nN][gG]"))  # Match PNG files
-        # Match DV files
-        input_files += list(input_folder.rglob("*.[dD][vV]"))
+        if '.jpg' in accepted_formats or '.jpeg' in accepted_formats:
+            input_files += list(
+                input_folder.rglob("*.[jJ][pP][eE][gG]")
+            )  # Match JPEG files
+            input_files += list(input_folder.rglob("*.[jJ][pP][gG]"))  # Match JPG files
+        if '.png' in accepted_formats:
+            input_files += list(input_folder.rglob("*.[pP][nN][gG]"))  # Match PNG files
+        if '.dv' in accepted_formats:
+            input_files += list(input_folder.rglob("*.[dD][vV]"))  # Match DV files
 
         # Cast the path to string
         st.session_state[key] += input_files

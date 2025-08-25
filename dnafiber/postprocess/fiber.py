@@ -88,6 +88,8 @@ class FiberProps:
 
     @property
     def ratio(self):
+        if self.red == 0:
+            return np.nan
         return self.green / self.red
 
     @property
@@ -147,6 +149,18 @@ class Fibers:
     def __len__(self):
         return len(self.fibers)
 
+
+    @property
+    def ratios(self):
+        return [fiber.ratio for fiber in self.fibers]
+    
+    @property
+    def reds(self):
+        return [fiber.red for fiber in self.fibers]
+    @property
+    def greens(self):
+        return [fiber.green for fiber in self.fibers]
+    
     def get_labelmap(self, h, w, fiber_width=1):
         labelmap = np.zeros((h, w), dtype=np.uint8)
         for fiber in self.fibers:
@@ -190,6 +204,35 @@ class Fibers:
                 if fiber.bbox_intersect(other_fiber, ratio):
                     intersection.append_if_not_exists(fiber, ratio)
         return intersection
+    
+    def to_df(self, pixel_size=0.13, img_name: Optional[str] = None, filter_invalid=True):
+        import pandas as pd
+
+        data = {
+            "Fiber ID": [],
+            "First analog (µm)": [],
+            "Second analog (µm)": [],
+            "Ratio": [],
+            "Fiber type": [],
+            "Valid": [],
+        }
+
+        for i, fiber in enumerate(self.fibers):
+            if filter_invalid and not fiber.is_valid:
+                continue
+            data["Fiber ID"].append(i)
+            r, g = fiber.counts
+            red_length = pixel_size * r
+            green_length = pixel_size * g
+            data["First analog (µm)"].append(red_length)
+            data["Second analog (µm)"].append(green_length)
+            data["Ratio"].append(fiber.ratio)
+            data["Fiber type"].append(fiber.fiber_type)
+            data["Valid"].append(fiber.is_valid)
+        df = pd.DataFrame.from_dict(data)
+        if img_name:
+            df["Image Name"] = img_name
+        return df
 
 
 def estimate_fiber_category(fiber: np.ndarray) -> str:

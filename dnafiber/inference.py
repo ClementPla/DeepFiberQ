@@ -91,6 +91,7 @@ def infer(
     use_tta=False,
     to_numpy=True,
     only_probabilities=False,
+    verbose=False,
 ):
     if isinstance(model, str):
         model = _get_model(device=device, revision=model)
@@ -102,14 +103,14 @@ def infer(
     device = torch.device(device)
     sliding_window = None
 
-    if int(h * scale) > 512 or int(w * scale) > 512:
+    if int(h * scale) > 1024 or int(w * scale) > 1024:
         sliding_window = SlidingWindowInferer(
-            roi_size=(512, 512),
+            roi_size=(1024, 1024),
             sw_batch_size=4,
             overlap=0.25,
             mode="gaussian",
             device=device,
-            progress=True,
+            progress=verbose,
         )
 
     inferer = Inferer(

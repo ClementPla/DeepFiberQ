@@ -1,5 +1,6 @@
 import math
 import time
+from enum import Enum
 
 import cv2
 import pandas as pd
@@ -7,7 +8,8 @@ import torch
 from joblib import Parallel, delayed
 
 from dnafiber.postprocess import refine_segmentation
-from dnafiber.postprocess.fiber import FiberProps
+
+from dnafiber.postprocess.fiber import FiberProps, Fibers
 from dnafiber.ui.inference import ui_inference_cacheless
 from dnafiber.data.utils import numpy_to_base64_jpeg
 from dnafiber.ui.utils import get_image_cacheless, get_multifile_image, _get_model
@@ -21,11 +23,8 @@ def run_one_file(
     reverse_channels=False,
     pixel_size=0.13,
     prediction_threshold=1 / 3,
-    create_thumbnail=True,
-    include_bbox=False,
     use_tta=True,
     use_correction=True,
-    include_segmentation=False,
     verbose=True,
 ):
     is_cuda_available = torch.cuda.is_available()
@@ -51,6 +50,8 @@ def run_one_file(
         use_tta=use_tta,
         use_correction=use_correction,
         only_segmentation=True,
+        prediction_threshold=prediction_threshold,
+        verbose=verbose,
     )
 
     if verbose:
@@ -81,34 +82,26 @@ def run_one_file(
                 x,
                 y,
                 correction_model=correction_model,
+                verbose=verbose,
                 device="cuda" if is_cuda_available else "cpu",
             )
             for (block_img, block, y, x) in (blocks)
         )
 
-        results = [fiber for block_result in parallel_results for fiber in block_result]
+        results = Fibers([fiber for block_result in parallel_results for fiber in block_result])
     else:
         results = refine_segmentation(
             image,
             prediction,
             correction_model=correction_model,
             device="cuda" if is_cuda_available else "cpu",
+            verbose=verbose,
         )
     if verbose:
         print(f"Refinement time: {time.time() - start:.2f} seconds for {filename}")
 
     return results
-    df = format_results_to_dataframe(
-        results,
-        image,
-        resolution=256,
-        include_thumbnails=create_thumbnail,
-        pixel_size=pixel_size,
-        include_bbox=include_bbox,
-        include_segmentation=include_segmentation,
-    )
-    df["image_name"] = filename
-    return df
+
 
 
 def format_results(results: list[FiberProps], pixel_size: float) -> pd.DataFrame:
@@ -235,21 +228,29 @@ def format_results_to_dataframe(
         df["Segmentation"] = df["Segmentation"].apply(lambda x: numpy_to_base64_jpeg(x))
     return df
 
+class Models(str, Enum):
+    UNET_SE_RESNET101 = "unet_se_resnet101"
+    UNET_SE_RESNET50 = "unet_se_resnet50"
+    UNET_EFFICIENTNET_B0 = "unet_timm-efficientnet-b0"
+    UNET_MOBILEONE_S0 = "unet_mobileone_s0"
+    UNET_MOBILEONE_S1 = "unet_mobileone_s1"
+    SEGFORMER_MIT_B0 = "segformer_mit_b0"
+    SEGFORMER_MIT_B4 = "segformer_mit_b4"
 
 MODELS_ZOO = {
-    "U-Net SE-ResNet101": "unet_se_resnet101",
-    "U-Net SE-ResNet50": "unet_se_resnet50",
-    "U-Net EfficientNet B0": "unet_timm-efficientnet-b0",
-    "U-Net MobileOne S0": "unet_mobileone_s0",
-    "U-Net MobileOne S1": "unet_mobileone_s1",
-    "Segformer MIT B0": "segformer_mit_b0",
-    "Segformer MIT B4": "segformer_mit_b4",
+    "U-Net SE-ResNet101": Models.UNET_SE_RESNET101,
+    "U-Net SE-ResNet50": Models.UNET_SE_RESNET50,
+    "U-Net EfficientNet B0": Models.UNET_EFFICIENTNET_B0,
+    "U-Net MobileOne S0": Models.UNET_MOBILEONE_S0,
+    "U-Net MobileOne S1": Models.UNET_MOBILEONE_S1,
+    "Segformer MIT B0": Models.SEGFORMER_MIT_B0,
+    "Segformer MIT B4": Models.SEGFORMER_MIT_B4,
 }
 
 
 ENSEMBLE = [
-    "unet_se_resnet101",
-    "segformer_mit_b4",
-    "unet_mobileone_s0",
-    "unet_mobileone_s1",
+    Models.UNET_SE_RESNET101,
+    Models.SEGFORMER_MIT_B4,
+    Models.UNET_MOBILEONE_S0,
+    Models.UNET_MOBILEONE_S1,
 ]

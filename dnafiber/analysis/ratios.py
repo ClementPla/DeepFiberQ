@@ -13,7 +13,9 @@ def load_experiment_predictions(root, filter_length=None):
     # Read all dataframes and concatenate them
     dfs = []
     for file in files:
-        df = pd.read_csv(file)
+        df = pd.read_csv(file)  
+        if "Image Name" in df.columns:
+            df["image_name"] = df["Image Name"]
         dfs.append(df)
     df = pd.concat(dfs, ignore_index=True)
     if filter_length is not None:
@@ -23,7 +25,7 @@ def load_experiment_predictions(root, filter_length=None):
     df["Type"] = df["image_name"].apply(lambda x: '-'.join(x.split("-")[:-1]))
     df["Grader"] = "AI"
     df = df[df["Fiber type"] == "double"]
-    # df  = df[df["Ratio"]< 8]
+    df  = df[df["Ratio"] < 10]
     # df = df[df["Ratio"] > 0.125]
     return df
 
@@ -43,9 +45,11 @@ def load_experiment_gt(root):
     return df_gt
 
 
-def load_experiment(root_pred, root_gt):
+def load_experiment(root_pred, root_gt, filter_invalid=True):
 
     df = load_experiment_predictions(root_pred)
+    if filter_invalid:
+        df = df[df["Valid"] == True]
     if not isinstance(root_gt, list):
         root_gt = [root_gt]
     
@@ -107,7 +111,8 @@ def create_violin_plot(df, palette):
     # The y range should be from 0.125 to 8
     # Remove minor ticks
     plt.minorticks_off()
-    plt.ylim(0.125, 32)
+    plt.ylim(0.125, 10)
+
     # Change the background color of the plot to white
     plt.xticks(rotation=45)
     # Remove x label
@@ -138,7 +143,7 @@ def create_swarm_plot(df, palette, yrange=(0.125, 32)):
     plt.xlabel("")
     plt.grid(axis='y', linestyle='--', alpha=0.7)
 
-def compare_pairs(df, pairs, palette):
+def compare_pairs(df, pairs, palette, base_offset=6):
     group_names = df["Type"].unique().tolist()
     
     for grader, color in zip(["Human", "AI"], palette):
@@ -165,10 +170,11 @@ def compare_pairs(df, pairs, palette):
                 # Calculate the position for the asterisks
                 x1 = index_one + 0.1
                 x2 = index_two - 0.1
-                y = 10 + pair[2] # y position for the asterisks
+                y = base_offset + pair[2] # y position for the asterisks
                 plt.plot([x1, x1, x2, x2], [y, y + 0.5, y + 0.5, y], lw=1.5, color="black")
-                plt.text(x=(x1 + x2) / 2 + (-0.3 if grader=="Human" else 0.3), y=y+0.5, 
+                plt.text(x=(x1 + x2) / 2 + (-0.3 if grader=="Human" else 0.3), y=y, 
                         s=asterisks, ha='center', va="bottom",fontsize=12, color=color)
+
                 
                 
 def graders_statistical_test(df, yoffset=6):
@@ -182,7 +188,7 @@ def graders_statistical_test(df, yoffset=6):
             continue
 
         # Perform t-test
-        #t_stat, p_value = ttest_ind(group1, group2, equal_var=False)
+        t_stat, p_value = ttest_ind(group1, group2, equal_var=False)
         try:
             p_value = f_oneway(group1, group2).pvalue
         except ValueError:

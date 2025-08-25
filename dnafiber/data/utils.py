@@ -89,6 +89,13 @@ def read_dv(filepath):
 
     return data
 
+def convert_rgb_to_mask(image, threshold=200):
+
+    output = np.zeros(image.shape[:2], dtype=np.uint8)
+    output[image[:, :, 0] > threshold] = 1
+    output[image[:, :, 1] > threshold] = 2
+    return output
+
 
 def numpy_to_base64_jpeg(image_array):
     """

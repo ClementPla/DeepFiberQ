@@ -48,6 +48,7 @@ def ui_inference_cacheless(
     only_segmentation=False,
     use_correction=None,
     prediction_threshold=1 / 3,
+    verbose=True,
 ):
     """
     A cacheless version of the ui_inference function.
@@ -74,6 +75,7 @@ def ui_inference_cacheless(
                             use_tta=use_tta,
                             scale=pixel_size,
                             only_probabilities=True,
+                            verbose=verbose,
                         ).cpu()
                     else:
                         output = (
@@ -85,6 +87,7 @@ def ui_inference_cacheless(
                                 use_tta=use_tta,
                                 scale=pixel_size,
                                 only_probabilities=True,
+                                verbose=verbose,
                             ).cpu()
                         )
             output = output / len(_model)
@@ -97,14 +100,15 @@ def ui_inference_cacheless(
                 scale=pixel_size,
                 use_tta=use_tta,
                 only_probabilities=True,
+                verbose=verbose,
             )
 
         output = output.cpu().numpy()
 
         pos_prob = 1 - output[0, 0, :, :]
 
-        pos_prob = binary_closing(pos_prob >= prediction_threshold, np.ones((5, 5)))
-        pos_prob = remove_small_objects(pos_prob, min_size=100)
+        pos_prob = binary_closing(pos_prob >= prediction_threshold, np.ones((3, 3)))
+        pos_prob = remove_small_objects(pos_prob, min_size=50)
 
         output[0, 0, pos_prob > 0] = 0
         output[0, 0, pos_prob == 0] = 1

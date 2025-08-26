@@ -88,7 +88,9 @@ def run_one_file(
             for (block_img, block, y, x) in (blocks)
         )
 
-        results = Fibers([fiber for block_result in parallel_results for fiber in block_result])
+        results = Fibers(
+            [fiber for block_result in parallel_results for fiber in block_result]
+        )
     else:
         results = refine_segmentation(
             image,
@@ -101,7 +103,6 @@ def run_one_file(
         print(f"Refinement time: {time.time() - start:.2f} seconds for {filename}")
 
     return results
-
 
 
 def format_results(results: list[FiberProps], pixel_size: float) -> pd.DataFrame:
@@ -228,14 +229,20 @@ def format_results_to_dataframe(
         df["Segmentation"] = df["Segmentation"].apply(lambda x: numpy_to_base64_jpeg(x))
     return df
 
+
 class Models(str, Enum):
     UNET_SE_RESNET101 = "unet_se_resnet101"
     UNET_SE_RESNET50 = "unet_se_resnet50"
     UNET_EFFICIENTNET_B0 = "unet_timm-efficientnet-b0"
     UNET_MOBILEONE_S0 = "unet_mobileone_s0"
     UNET_MOBILEONE_S1 = "unet_mobileone_s1"
+    UNET_MOBILEONE_S2 = "unet_mobileone_s2"
+    UNET_MOBILEONE_S3 = "unet_mobileone_s3"
     SEGFORMER_MIT_B0 = "segformer_mit_b0"
+    SEGFORMER_MIT_B1 = "segformer_mit_b1"
+    SEGFORMER_MIT_B2 = "segformer_mit_b2"
     SEGFORMER_MIT_B4 = "segformer_mit_b4"
+
 
 MODELS_ZOO = {
     "U-Net SE-ResNet101": Models.UNET_SE_RESNET101,
@@ -243,14 +250,21 @@ MODELS_ZOO = {
     "U-Net EfficientNet B0": Models.UNET_EFFICIENTNET_B0,
     "U-Net MobileOne S0": Models.UNET_MOBILEONE_S0,
     "U-Net MobileOne S1": Models.UNET_MOBILEONE_S1,
+    "U-Net MobileOne S2": Models.UNET_MOBILEONE_S2,
+    "U-Net MobileOne S3": Models.UNET_MOBILEONE_S3,
     "Segformer MIT B0": Models.SEGFORMER_MIT_B0,
+    "Segformer MIT B1": Models.SEGFORMER_MIT_B1,
+    "Segformer MIT B2": Models.SEGFORMER_MIT_B2,
     "Segformer MIT B4": Models.SEGFORMER_MIT_B4,
 }
 
 
 ENSEMBLE = [
     Models.UNET_SE_RESNET101,
+    Models.SEGFORMER_MIT_B2,
     Models.SEGFORMER_MIT_B4,
     Models.UNET_MOBILEONE_S0,
     Models.UNET_MOBILEONE_S1,
+    Models.UNET_MOBILEONE_S2,
+    Models.UNET_MOBILEONE_S3,
 ]

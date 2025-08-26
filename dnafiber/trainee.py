@@ -10,6 +10,7 @@ import torch
 import torchvision
 from dnafiber.metric import DNAFIBERMetric
 from skimage.measure import label
+from torch.optim.lr_scheduler import SequentialLR, LinearLR
 
 
 def _convert_activations(module, from_activation, to_activation):
@@ -40,10 +41,25 @@ class Trainee(LightningModule, PyTorchModelHubMixin):
             from dnafiber.model.autopadDPT import AutoPad
 
             # Pad input to be divisible by 14. Input size are usually 512x512, 1024x1024 or 2048x2048
-            self.model = AutoPad(smp.create_model(classes=3, **self.model_config))
+            self.model = AutoPad(
+                smp.create_model(
+                    classes=3,
+                    drop_path_rate=0.0,
+                    **self.model_config,
+                )
+            )
 
         else:
-            self.model = smp.create_model(classes=3, **self.model_config)
+            self.model = smp.create_model(
+                classes=3,
+                drop_path_rate=0.0,
+                **self.model_config,
+            )
+
+        # for m in self.model.encoder.modules():
+        #     if isinstance(m, torch.nn.BatchNorm2d):
+        #         m.eval()
+        #         m.requires_grad_(False)
 
         self.loss = DiceCELoss(
             to_onehot_y=True,
@@ -103,14 +119,18 @@ class Trainee(LightningModule, PyTorchModelHubMixin):
         optimizer = AdamW(
             self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay
         )
-        scheduler = CosineAnnealingLR(
+        warmup = LinearLR(optimizer, start_factor=0.1, total_iters=500)
+        cosine = CosineAnnealingLR(
             optimizer,
-            T_max=self.trainer.max_epochs,  # type: ignore
-            eta_min=self.learning_rate / 25,
+            T_max=self.trainer.estimated_stepping_batches,
+            eta_min=self.learning_rate / 3,
+        )
+        scheduler = SequentialLR(
+            optimizer, schedulers=[warmup, cosine], milestones=[500]
         )
         scheduler = {
             "scheduler": scheduler,
-            "interval": "epoch",
+            "interval": "step",
         }
         return [optimizer], [scheduler]
 

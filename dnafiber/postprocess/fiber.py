@@ -149,18 +149,18 @@ class Fibers:
     def __len__(self):
         return len(self.fibers)
 
-
     @property
     def ratios(self):
         return [fiber.ratio for fiber in self.fibers]
-    
+
     @property
     def reds(self):
         return [fiber.red for fiber in self.fibers]
+
     @property
     def greens(self):
         return [fiber.green for fiber in self.fibers]
-    
+
     def get_labelmap(self, h, w, fiber_width=1):
         labelmap = np.zeros((h, w), dtype=np.uint8)
         for fiber in self.fibers:
@@ -197,6 +197,14 @@ class Fibers:
             union.append_if_not_exists(fiber, ratio)
         return union
 
+    def difference(self, other, ratio):
+        substract = Fibers([])
+        intersection = self.intersection(other, ratio)
+        for fiber in self.fibers:
+            if not intersection.contains(fiber, ratio):
+                substract.append_if_not_exists(fiber, ratio)
+        return substract
+
     def intersection(self, other, ratio=0.5):
         intersection = Fibers([])
         for fiber in self.fibers:
@@ -204,8 +212,10 @@ class Fibers:
                 if fiber.bbox_intersect(other_fiber, ratio):
                     intersection.append_if_not_exists(fiber, ratio)
         return intersection
-    
-    def to_df(self, pixel_size=0.13, img_name: Optional[str] = None, filter_invalid=True):
+
+    def to_df(
+        self, pixel_size=0.13, img_name: Optional[str] = None, filter_invalid=True
+    ):
         import pandas as pd
 
         data = {

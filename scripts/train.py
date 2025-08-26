@@ -22,7 +22,7 @@ seed_everything(1234, workers=True)
 torch.set_float32_matmul_precision("high")
 
 
-def train(arch, encoder, use_swa=True):
+def train(arch, encoder, use_swa=False):
     c = Config("configs/config.yaml")
     c["model"]["arch"] = arch
     c["model"]["encoder_name"] = encoder

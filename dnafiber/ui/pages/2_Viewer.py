@@ -1,29 +1,32 @@
+import math
+
+import cv2
+import numpy as np
 import streamlit as st
-from bokeh.plotting import figure
+import streamlit_image_coordinates
+import torch
 from bokeh.layouts import gridplot
+from bokeh.models import (
+    HoverTool,
+    Range1d,
+)
+from bokeh.plotting import figure
+from catppuccin import PALETTE
+from skimage.segmentation import expand_labels
+from skimage.util import view_as_blocks
 from streamlit_bokeh import streamlit_bokeh
+from PIL import Image
+import io
+from dnafiber.data.utils import CMAP, pad_image_to_croppable
+from dnafiber.deployment import MODELS_ZOO, MODELS_ZOO_R
+from dnafiber.ui.components import show_fibers_cacheless, table_components
+from dnafiber.ui.inference import get_model, ui_inference, ui_inference_cacheless
 from dnafiber.ui.utils import (
+    bokeh_imshow,
     get_image,
     get_multifile_image,
     get_resized_image,
-    bokeh_imshow,
 )
-from dnafiber.data.utils import pad_image_to_croppable
-from dnafiber.ui.components import table_components, show_fibers_cacheless
-from dnafiber.deployment import MODELS_ZOO
-from dnafiber.ui.inference import ui_inference, get_model
-from skimage.util import view_as_blocks
-import cv2
-import math
-from bokeh.models import (
-    Range1d,
-    HoverTool,
-)
-import streamlit_image_coordinates
-from catppuccin import PALETTE
-import numpy as np
-import torch
-from skimage.segmentation import expand_labels
 
 st.set_page_config(
     layout="wide",
@@ -69,7 +72,7 @@ def start_inference(use_tta=True, use_correction=True, prediction_threshold=1 / 
                 model.append(get_model(MODELS_ZOO[list(MODELS_ZOO.keys())[_]]))
     else:
         with st.spinner("Loading model..."):
-            model = get_model(MODELS_ZOO[st.session_state.model_name])
+            model = get_model(st.session_state.model_name)
     prediction = ui_inference(
         model,
         image,
@@ -101,7 +104,7 @@ def start_inference(use_tta=True, use_correction=True, prediction_threshold=1 / 
         table_components(df)
 
     with tab_viewer:
-        max_width = 2048
+        max_width = 10000
         if image.shape[1] > max_width:
             st.toast("Images are displayed at a lower resolution of 2048 pixel wide")
 
@@ -138,7 +141,7 @@ def display_prediction(_prediction, _image, image_id=None, show_errors=True):
             continue
         x, y, w, h = region.scaled_coordinates(scale)
         data = cv2.resize(
-            expand_labels(region.data, 1),
+            expand_labels(region.data, 2),
             None,
             fx=scale,
             fy=scale,
@@ -299,6 +302,11 @@ if on_session_start():
             id=file_id,
         )
 
+    download_button = st.button(
+        "Download full segmentation",
+        help="Download the full segmented image as a PNG file.",
+    )
+    org_image = image.copy()
     h, w = image.shape[:2]
     with st.sidebar:
         st.metric(
@@ -333,7 +341,8 @@ if on_session_start():
             )
             model_name = st.selectbox(
                 "Select a model",
-                list(MODELS_ZOO.keys()),
+                list(MODELS_ZOO.values()),
+                format_func=lambda x: MODELS_ZOO_R[x],
                 index=0,
                 help="Select a model to use for inference",
                 disabled=use_ensemble,
@@ -433,7 +442,7 @@ if on_session_start():
 
         st.rerun()
 
-    image = blocks[which_y, which_x, 0]
+    # image = blocks[which_y, which_x, 0]
     with st.sidebar:
         st.image(image, caption="Selected block", use_container_width=True)
 
@@ -445,11 +454,48 @@ if on_session_start():
         + ("_detect_errors" if detect_errors else "_no_detect_errors")
     )
     col1, col2, col3 = st.columns([1, 1, 1])
+
+    if download_button:
+        st.success("Infering on the full segmented image...")
+        prediction = ui_inference_cacheless(
+            _model=model_name if not use_ensemble else "ensemble",
+            _image=org_image,
+            _device="cuda" if torch.cuda.is_available() else "cpu",
+            use_tta=use_tta,
+            use_correction=detect_errors,
+            prediction_threshold=prediction_threshold,
+            pixel_size=st.session_state.get("pixel_size", 0.13),
+            verbose=False,
+        )
+        org_h, org_w = org_image.shape[:2]
+        labelmap = prediction.valid_copy().get_labelmap(org_h, org_w, 3)
+        labelmap = (CMAP(labelmap)[:, :, :3] * 255).astype(np.uint8)
+
+        image = Image.fromarray(labelmap)
+
+        # Create an in-memory binary stream
+        buffer = io.BytesIO()
+
+        # Save the image to the buffer in PNG format
+        image.save(buffer, format="jpeg")
+
+        # Get the byte data from the buffer
+        jpeg_data = buffer.getvalue()
+
+        st.download_button(
+            "Download full segmented image",
+            data=jpeg_data,
+            file_name="full_segmented_image.jpg",
+            mime="image/jpeg",
+        )
+
     start_inference(
         use_tta=use_tta,
         use_correction=detect_errors,
         prediction_threshold=prediction_threshold,
     )
+
+
 else:
     st.switch_page("pages/1_Load.py")
 

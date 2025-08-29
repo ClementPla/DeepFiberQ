@@ -1,8 +1,11 @@
-import streamlit as st
+import math
+
 import cv2
 import pandas as pd
+import streamlit as st
+
 from dnafiber.data.utils import numpy_to_base64_jpeg
-import math
+
 
 @st.cache_data
 def show_fibers(_prediction, _image, image_id=None, resolution=400, show_errors=True):
@@ -33,24 +36,24 @@ def show_fibers_cacheless(_prediction, _image, image_id=None, resolution=400, sh
         data["is_valid"].append(fiber.is_valid)
 
         x, y, w, h = fiber.bbox
-
+      
         # Offset by half the height and width the x, y coordinates to have a larger visualization
-        offsetX = int(w)
-        offsetY = int(h)
-        x = max(0, x - offsetX)
-        y = max(0, y - offsetY)
-        w += offsetX * 2
-        h += offsetY * 2
+        xextract1 = max(0, x-math.floor(w / 2))
+        yextract1 = max(0, y-math.floor(h / 2))
+        xextract2 = min(_image.shape[1], x + w + math.floor(w / 2))
+        yextract2 = min(_image.shape[0], y + h + math.floor(h / 2))
 
-        # w = max(w, h)
-        # h = max(h, w)
-        visu = _image[y : y + h, x : x + w, :]
+        visu = _image[max(0, yextract1) : min(_image.shape[0], yextract2), max(0, xextract1) : min(_image.shape[1], xextract2)]
+
+        rect_coordinates = (x - xextract1, y - yextract1, w, h)
+
         visu = cv2.normalize(visu, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+        # Draw the bbox on the visualization
+        # Scale the visualization to a minimum width or height of `resolution` pixels
 
-        # Scale the visualization to a minimum width of 256 pixels
-        
-        if visu.shape[1] != resolution:
-            scale = resolution / visu.shape[1]
+        max_dim = max(visu.shape[0], visu.shape[1])
+        if max_dim < resolution:
+            scale = resolution / max_dim
             visu = cv2.resize(
                 visu,
                 None,
@@ -58,17 +61,19 @@ def show_fibers_cacheless(_prediction, _image, image_id=None, resolution=400, sh
                 fy=scale,
                 interpolation=cv2.INTER_LINEAR,
             )
-            offsetX = math.floor(offsetX * scale)
-            offsetY = math.floor(offsetY * scale)
+
+            # Scale the rectangle coordinates as well
+            rect_coordinates = (
+                math.floor(rect_coordinates[0] * scale),
+                math.floor(rect_coordinates[1] * scale),
+                math.floor(rect_coordinates[2] * scale),
+                math.floor(rect_coordinates[3] * scale),
+            )
+
+        cv2.rectangle(visu, (rect_coordinates[0], rect_coordinates[1]), (rect_coordinates[0] + rect_coordinates[2], rect_coordinates[1] + rect_coordinates[3]), (0, 0, 255), 3)
 
         # Draw a rectangle around the fiber, without the offset
-        cv2.rectangle(
-            visu,
-            (offsetX, offsetY),
-            (visu.shape[1] - offsetX, visu.shape[0] - offsetY),
-            (0, 0, 255),
-            2,
-        )
+        
         # Pad the visualization to have a square image
         if visu.shape[0] < visu.shape[1]:
             pad = (visu.shape[1] - visu.shape[0]) // 2

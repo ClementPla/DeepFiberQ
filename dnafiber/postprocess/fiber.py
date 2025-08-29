@@ -152,6 +152,10 @@ class Fibers:
     @property
     def ratios(self):
         return [fiber.ratio for fiber in self.fibers]
+    
+    @property
+    def lengths(self):
+        return [fiber.length for fiber in self.fibers]
 
     @property
     def reds(self):

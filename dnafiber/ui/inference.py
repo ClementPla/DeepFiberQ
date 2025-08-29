@@ -5,9 +5,8 @@ import numpy as np
 from dnafiber.ui.utils import _get_model
 import torch
 from dnafiber.postprocess.error_detection import load_model
-from skimage.segmentation import expand_labels
 from skimage.morphology import binary_closing, remove_small_objects
-
+from dnafiber.postprocess.fiber import Fibers
 
 @st.cache_resource
 def ui_inference(
@@ -18,7 +17,7 @@ def ui_inference(
     use_correction=True,
     prediction_threshold=1 / 3,
     id=None,
-):
+) -> np.ndarray | Fibers:
     return ui_inference_cacheless(
         _model,
         _image,
@@ -49,7 +48,7 @@ def ui_inference_cacheless(
     use_correction=None,
     prediction_threshold=1 / 3,
     verbose=True,
-):
+) -> np.ndarray | Fibers:
     """
     A cacheless version of the ui_inference function.
     This function does not use caching and is intended for use in scenarios where caching is not desired.

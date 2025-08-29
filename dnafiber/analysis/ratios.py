@@ -2,11 +2,11 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 from pathlib import Path
-from scipy.stats import f_oneway, tukey_hsd
+from scipy.stats import f_oneway, tukey_hsd, mannwhitneyu
 from scipy.stats import ttest_ind, kruskal, alexandergovern
 
 
-def load_experiment_predictions(root, filter_length=None):
+def load_experiment_predictions(root, filter_length=None, keep_invalid=False):
     root = Path(root)
     files = list(root.rglob("*.csv"))
 
@@ -18,15 +18,15 @@ def load_experiment_predictions(root, filter_length=None):
             df["image_name"] = df["Image Name"]
         dfs.append(df)
     df = pd.concat(dfs, ignore_index=True)
+    df['Length'] = df['First analog (µm)'] + df['Second analog (µm)']
     if filter_length is not None:
         length = df['Second analog (µm)'] + df['First analog (µm)']
         df = df[length > filter_length]
-    
+    if not keep_invalid:
+        df = df[df["Valid"] == True]
     df["Type"] = df["image_name"].apply(lambda x: '-'.join(x.split("-")[:-1]))
     df["Grader"] = "AI"
     df = df[df["Fiber type"] == "double"]
-    df  = df[df["Ratio"] < 10]
-    # df = df[df["Ratio"] > 0.125]
     return df
 
 def load_experiment_gt(root):
@@ -36,23 +36,31 @@ def load_experiment_gt(root):
     gt_dfs = []
     for sheet_name, gt_df in gt.items():
         df_gt = pd.DataFrame()
+        valid_indices = gt_df[0].dropna().index
+        gt_df = gt_df.loc[valid_indices]
+        # Analogs: column 1, Even row: second analog, Odd row: first analog
+        first_analog = gt_df[1].dropna().values[1::2]
+        second_analog = gt_df[1].dropna().values[0::2]
         df_gt["Ratio"] = gt_df[2].dropna()
         df_gt["Grader"] = "Human"
         df_gt["Type"] = sheet_name
+        df_gt["Length"] = first_analog + second_analog
+        df_gt["Valid"] = True
         gt_dfs.append(df_gt)
 
     df_gt = pd.concat(gt_dfs, ignore_index=True)
     return df_gt
 
 
-def load_experiment(root_pred, root_gt, filter_invalid=True):
+def load_experiment(root_pred, root_gt, filter_invalid=False, keep_n_longest=None):
 
-    df = load_experiment_predictions(root_pred)
+    df = load_experiment_predictions(root_pred, keep_invalid=not filter_invalid)
     if filter_invalid:
-        df = df[df["Valid"] == True]
+        df = df[df["Valid"]]
+    if keep_n_longest is not None:
+        df = df.sort_values(by="Length", ascending=False).groupby("Type").head(keep_n_longest)
     if not isinstance(root_gt, list):
         root_gt = [root_gt]
-    
     df_gts = []
     for root in root_gt:
         if isinstance(root, str):
@@ -62,8 +70,8 @@ def load_experiment(root_pred, root_gt, filter_invalid=True):
         df_gt = load_experiment_gt(root)
         df_gts.append(df_gt)
     df_gt = pd.concat(df_gts, ignore_index=True)
-
-    df = pd.concat([df[["Type", "Ratio", "Grader"]], df_gt], ignore_index=True)
+    
+    df = pd.concat([df[["Type", "Ratio", "Grader", "Length", "Valid"]], df_gt], ignore_index=True)
     df["Grader"] = pd.Categorical(df["Grader"], categories=["Human", "AI"], ordered=True)
 
     return df
@@ -118,44 +126,63 @@ def create_violin_plot(df, palette):
     # Remove x label
     plt.xlabel("")
     plt.grid(axis='y', linestyle='--', alpha=0.7)
-    
-def create_swarm_plot(df, palette, yrange=(0.125, 32)):
-    sns.swarmplot(data=df, x="Type", y="Ratio", hue="Grader", palette=palette, dodge=True)
-    for c in plt.gca().collections:
-        c.set_zorder(1)  # Set the zorder to 1 for all points
 
-    # Show the median as a horizontal line
-    for j, grader in enumerate(df["Grader"].unique()):
-        median_values = df[df["Grader"] == grader].groupby("Type")["Ratio"].median()
-        offset = 0.2 if j == 1 else -0.2  # Offset for the median line based on grader
-        for i, median in enumerate(median_values):
-            plt.hlines(median, i+offset - 0.1, i+offset + 0.1, colors='red', linestyles='dashed', lw=1.5)
-    # The hlines should be over the points
-            plt.gca().collections[-1].set_zorder(2)
-
-
-    plt.yscale("log")
-    plt.yticks([0.125, 0.25, 0.5, 1, 2, 4, 8],
-               [0.125, 0.25, 0.5, 1, 2, 4, 8])
+def create_boxen_plot(df, palette, yrange=(0.125, 32), column="Ratio", log_scale=True, rotate_xticks=45, **kwargs):
+    sns.boxenplot(data=df, x="Type", y=column, hue="Grader", palette=palette, dodge=True, linewidth=0.75, **kwargs)
+    if log_scale:
+        plt.yscale("log")
+        plt.yticks([0.125, 0.25, 0.5, 1, 2, 4, 8],
+                   [0.125, 0.25, 0.5, 1, 2, 4, 8])
     plt.minorticks_off()
     plt.ylim(*yrange)
-    plt.xticks(rotation=45)
+    plt.xticks(rotation=rotate_xticks)
     plt.xlabel("")
     plt.grid(axis='y', linestyle='--', alpha=0.7)
 
-def compare_pairs(df, pairs, palette, base_offset=6):
+
+def create_swarm_plot(df, palette, yrange=(0.125, 32), column="Ratio", log_scale=True, 
+                      include_median=True,
+                      rotate_xticks=45, stripplot=False,
+                       **kwargs):
+    if stripplot:
+        sns.stripplot(data=df, x="Type", y=column, hue="Grader", palette=palette, **kwargs)
+    else:
+        sns.swarmplot(data=df, x="Type", y=column, hue="Grader", palette=palette, **kwargs)
+    for c in plt.gca().collections:
+        c.set_zorder(1)  # Set the zorder to 1 for all points
+    if include_median:
+    # Show the median as a horizontal line
+        for j, grader in enumerate(df["Grader"].unique()):
+            median_values = df[df["Grader"] == grader].groupby("Type")["Ratio"].median()
+            offset = 0.2 if j == 1 else -0.2  # Offset for the median line based on grader
+            for i, median in enumerate(median_values):
+                plt.hlines(median, i+offset - 0.1, i+offset + 0.1, colors='red', linestyles='dashed', lw=1.5)
+        # The hlines should be over the points
+                plt.gca().collections[-1].set_zorder(2)
+
+    if log_scale:
+        plt.yscale("log")
+        plt.yticks([0.125, 0.25, 0.5, 1, 2, 4, 8],
+                [0.125, 0.25, 0.5, 1, 2, 4, 8])
+    plt.minorticks_off()
+    plt.ylim(*yrange)
+    plt.xticks(rotation=rotate_xticks)
+    plt.xlabel("")
+    plt.grid(axis='y', linestyle='--', alpha=0.7)
+
+def compare_pairs(df, pairs, palette, base_offset=6, column="Ratio"):
     group_names = df["Type"].unique().tolist()
     
     for grader, color in zip(["Human", "AI"], palette):
         
         groups = []
         for g in group_names:
-            groups.append(df[(df["Type"] == g) & (df["Grader"]==grader)]["Ratio"])
-        
+            groups.append(df[(df["Type"] == g) & (df["Grader"]==grader)][column])
+
         tukey_results = tukey_hsd(*groups)
         for pair in pairs:
-            group1 = df[(df["Type"] == pair[0]) & (df["Grader"]==grader)]["Ratio"]
-            group2 = df[(df["Type"] == pair[1]) & (df["Grader"]==grader)]["Ratio"]
+            group1 = df[(df["Type"] == pair[0]) & (df["Grader"]==grader)][column]
+            group2 = df[(df["Type"] == pair[1]) & (df["Grader"]==grader)][column]
             # Perform one-way ANOVA
             f_stat, p_value = f_oneway(group1, group2)
             index_one =  group_names.index(pair[0])
@@ -177,12 +204,12 @@ def compare_pairs(df, pairs, palette, base_offset=6):
 
                 
                 
-def graders_statistical_test(df, yoffset=6):
+def graders_statistical_test(df, yoffset=6, column="Ratio"):
     # Perform one-way ANOVA for each grader
     for i, type_ in enumerate(df["Type"].unique()):
-        
-        group1 = df[(df["Type"] == type_) & (df["Grader"] == "Human")]["Ratio"]
-        group2 = df[(df["Type"] == type_) & (df["Grader"] == "AI")]["Ratio"]
+
+        group1 = df[(df["Type"] == type_) & (df["Grader"] == "Human")][column]
+        group2 = df[(df["Type"] == type_) & (df["Grader"] == "AI")][column]
 
         if group1.empty or group2.empty:
             continue
@@ -204,4 +231,21 @@ def graders_statistical_test(df, yoffset=6):
             plt.text(x=(x1 + x2) / 2, y=yoffset + 0.5,
                      s=asterisks, ha='center', va='bottom', fontsize=8, color="black")
 
-        
+
+def select_N_closest_to_mean(df, N=10, column="Ratio"):
+    """
+    Select N closest values to the mean for each Type and Grader.
+    """
+    selected_dfs = []
+    for (type_, grader), group in df.groupby(["Type", "Grader"]):
+        if grader == "Human":
+            selected_dfs.append(group)
+            continue
+        mean = group[column].mean()
+        group["Distance to mean"] = (group[column] - mean).abs()
+        if N is None:
+            # We chose N as the size of the Human grader group
+            N = df[(df["Type"] == type_) & (df["Grader"] == "Human")].shape[0]
+        closest_to_mean = group.nsmallest(N, "Distance to mean")
+        selected_dfs.append(closest_to_mean)
+    return pd.concat(selected_dfs, ignore_index=True)

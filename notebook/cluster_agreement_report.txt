@@ -1,0 +1,26 @@
+=== Trend Agreement Across Clusters ===
+Scale: log(Ratio) ; cluster means
+Graders: A = AI ; B = Human
+Clusters analyzed (both present): 4
+
+[Correlations across clusters]
+  Pearson r = 0.918 (p = 0.082)
+  Spearman rho = 1.000 (p = 0)
+  Kendall tau = 1.000 (p = 0.0833)
+
+[OLS: B on A (cluster-level)]
+  Intercept = -0.006066 (95% CI -0.1053 to 0.09317)
+  Slope     = 0.936 (95% CI -0.294 to 2.166)
+
+[Deming regression (error in both)]
+  Lambda (σ_B^2 / σ_A^2 for error) ≈ 0.0596
+  Intercept = -0.007792
+  Slope     = 1.101
+
+[Interaction test at individual level]
+  ANOVA p-value for C(Type):C(Grader): p = 0.519
+  (Small p suggests observers differ in how they contrast clusters.)
+
+[Equivalence tests (OLS)]
+  Intercept: -0.006 (95% CI -0.105–0.093), bounds [-0.1, 0.1] → Not equivalent ❌
+  Slope: 0.936 (95% CI -0.294–2.166), bounds [0.9, 1.1] → Not equivalent ❌

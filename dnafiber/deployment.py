@@ -245,10 +245,10 @@ class Models(str, Enum):
 
 
 MODELS_ZOO = {
+    "U-Net MobileOne S0": Models.UNET_MOBILEONE_S0,
     "U-Net SE-ResNet101": Models.UNET_SE_RESNET101,
     "U-Net SE-ResNet50": Models.UNET_SE_RESNET50,
     "U-Net EfficientNet B0": Models.UNET_EFFICIENTNET_B0,
-    "U-Net MobileOne S0": Models.UNET_MOBILEONE_S0,
     "U-Net MobileOne S1": Models.UNET_MOBILEONE_S1,
     "U-Net MobileOne S2": Models.UNET_MOBILEONE_S2,
     "U-Net MobileOne S3": Models.UNET_MOBILEONE_S3,
@@ -257,13 +257,13 @@ MODELS_ZOO = {
     "Segformer MIT B2": Models.SEGFORMER_MIT_B2,
     "Segformer MIT B4": Models.SEGFORMER_MIT_B4,
 }
-
+MODELS_ZOO_R = {v: k for k, v in MODELS_ZOO.items()}
 
 ENSEMBLE = [
+    Models.UNET_MOBILEONE_S0,
     Models.UNET_SE_RESNET101,
     Models.SEGFORMER_MIT_B2,
     Models.SEGFORMER_MIT_B4,
-    Models.UNET_MOBILEONE_S0,
     Models.UNET_MOBILEONE_S1,
     Models.UNET_MOBILEONE_S2,
     Models.UNET_MOBILEONE_S3,

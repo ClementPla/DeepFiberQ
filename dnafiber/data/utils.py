@@ -8,7 +8,10 @@ from czifile import CziFile
 from tifffile import imread
 import math
 import streamlit as st
+from matplotlib.colors import ListedColormap
 
+
+CMAP = ListedColormap(["#000000", "#ff0000", "#00ff00"])
 
 def read_svg(svg_path):
     doc = minidom.parse(str(svg_path))

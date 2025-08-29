@@ -39,7 +39,6 @@ def get_model(model_name):
     )
     return model
 
-@torch.inference_mode()
 def ui_inference_cacheless(
     _model,
     _image,
@@ -77,8 +76,7 @@ def ui_inference_cacheless(
                         verbose=verbose,
                     ).cpu()
                 else:
-                    output += (
-                        + infer(
+                    output = output + (infer(
                             model,
                             image=_image,
                             device=_device,

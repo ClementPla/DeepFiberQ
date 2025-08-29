@@ -60,11 +60,11 @@ def load_image(_filepath):
 
 
 @st.cache_data
-def get_image(_filepath, reverse_channel, id):
-    return get_image_cacheless(_filepath, reverse_channel)
+def get_image(_filepath, reverse_channel, id, bit_depth=14):
+    return get_image_cacheless(_filepath, reverse_channel, bit_depth=bit_depth)
 
 
-def get_image_cacheless(filepath, reverse_channel):
+def get_image_cacheless(filepath, reverse_channel, bit_depth=14):
     """
     A cacheless version of the get_image function.
     This function does not use caching and is intended for use in scenarios where caching is not desired.
@@ -77,22 +77,22 @@ def get_image_cacheless(filepath, reverse_channel):
         or filename.endswith(".tiff")
         or filename.endswith(".dv")
     ):
-        image = preprocess(image, reverse_channel)
+        image = preprocess(image, reverse_channel, bit_depth=bit_depth)
     image = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
     return image
 
 
-def get_multifile_image(_filepaths):
+def get_multifile_image(_filepaths, bit_depth=14):
     result = None
 
     if _filepaths[0] is not None:
-        chan1 = get_image(_filepaths[0], False, _filepaths[0].file_id)
+        chan1 = get_image(_filepaths[0], False, _filepaths[0].file_id, bit_depth=bit_depth)
         chan1 = cv2.cvtColor(chan1, cv2.COLOR_RGB2GRAY)
         h, w = chan1.shape[:2]
     else:
         chan1 = None
     if _filepaths[1] is not None:
-        chan2 = get_image(_filepaths[1], False, _filepaths[1].file_id)
+        chan2 = get_image(_filepaths[1], False, _filepaths[1].file_id, bit_depth=bit_depth)
         chan2 = cv2.cvtColor(chan2, cv2.COLOR_RGB2GRAY)
         h, w = chan2.shape[:2]
     else:

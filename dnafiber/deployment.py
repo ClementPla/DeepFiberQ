@@ -26,6 +26,7 @@ def run_one_file(
     use_tta=True,
     use_correction=True,
     verbose=True,
+    bit_depth=14,
 ):
     is_cuda_available = torch.cuda.is_available()
     if isinstance(file, np.ndarray):
@@ -40,7 +41,7 @@ def run_one_file(
         image = get_multifile_image(file)
     else:
         filename = file.name
-        image = get_image_cacheless(file, reverse_channels)
+        image = get_image_cacheless(file, reverse_channels, bit_depth=bit_depth)
     start = time.time()
     prediction = ui_inference_cacheless(
         _model=model,

@@ -303,6 +303,7 @@ if on_session_start():
             file,
             reverse_channel=st.session_state.get("reverse_channels", False),
             id=file_id,
+            bit_depth=st.session_state.get("bit_depth", 14),
         )
 
     download_button = st.button(
@@ -315,6 +316,10 @@ if on_session_start():
         st.metric(
             "Pixel size (µm)",
             st.session_state.get("pixel_size", 0.13),
+        )
+        st.metric(
+            "Bit depth",
+            st.session_state.get("bit_depth", 14),
         )
 
         
@@ -381,7 +386,10 @@ if on_session_start():
     st.session_state.image_id = (
         (file_id + str(model_name))
         + ("_use_tta" if use_tta else "_no_tta")
-        + ("_detect_errors" if detect_errors else "_no_detect_errors")
+        + ("_detect_errors" if detect_errors else "_no_detect_errors") + f"_{prediction_threshold:.2f}" 
+        + f"_{h}x{w}" + f"_{st.session_state.get('pixel_size', 0.13)}um" + f"_{'ensemble' if use_ensemble else model_name}"
+        + f"_{'rev' if st.session_state.get('reverse_channels', False) else 'no_rev'}"
+        + f"_{st.session_state.get('bit_depth', 14)}bit"
     )
     col1, col2, col3 = st.columns([1, 1, 1])
 

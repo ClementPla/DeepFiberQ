@@ -5,7 +5,7 @@ import numpy as np
 import streamlit as st
 import streamlit_image_coordinates
 import torch
-from bokeh.layouts import gridplot
+from bokeh.layouts import gridplot, column, row
 from bokeh.models import (
     HoverTool,
     Range1d,
@@ -106,7 +106,7 @@ def start_inference(use_tta=True, use_correction=True, prediction_threshold=1 / 
     with tab_viewer:
         max_width = 10000
         if image.shape[1] > max_width:
-            st.toast("Images are displayed at a lower resolution of 2048 pixel wide")
+            st.toast("Images are displayed at a lower resolution of 4096 pixel wide")
 
         fig = display_prediction(
             _prediction=prediction,
@@ -118,14 +118,15 @@ def start_inference(use_tta=True, use_correction=True, prediction_threshold=1 / 
 
 
 def display_prediction(_prediction, _image, image_id=None, show_errors=True):
-    max_width = 2048
+    max_width = 4096
     image = _image
     if image.max() > 25:
         image = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
     scale = 1
     # Resize the image to max_width
-    if image.shape[1] > max_width:
-        scale = max_width / image.shape[1]
+    max_dim = max(image.shape[0], image.shape[1])
+    if max_dim > max_width:
+        scale = max_width / max_dim
         image = cv2.resize(
             image,
             None,
@@ -152,8 +153,7 @@ def display_prediction(_prediction, _image, image_id=None, show_errors=True):
             x : x + data.shape[1],
         ][data > 0] = data[data > 0]
     p1 = figure(
-        x_range=Range1d(-image.shape[1] / 8, image.shape[1] * 1.125, bounds="auto"),
-        y_range=Range1d(image.shape[0] * 1.125, -image.shape[0] / 8, bounds="auto"),
+        
         title=f"Detected fibers: {len(_prediction)} ({sum([1 for r in _prediction if not r.is_valid])} filtered)",
         tools="pan,wheel_zoom,box_zoom,reset,save",
         active_scroll="wheel_zoom",
@@ -175,6 +175,8 @@ def display_prediction(_prediction, _image, image_id=None, show_errors=True):
         tools="pan,wheel_zoom,box_zoom,reset,save",
         active_scroll="wheel_zoom",
     )
+    # Hide the toolbar of p2
+    p2.toolbar_location = None
     bokeh_imshow(p2, image)
     colors = [c.hex for c in PALETTE.latte.colors][:14]
     data_source = dict(
@@ -245,11 +247,12 @@ def display_prediction(_prediction, _image, image_id=None, show_errors=True):
 
     p1.axis.visible = False
     p2.axis.visible = False
-    fig = gridplot(
-        [[p2, p1]],
-        merge_tools=True,
+    fig = row(
+        p2,
+        p1,
+        # merge_tools=True,
         sizing_mode="stretch_width",
-        toolbar_options=dict(logo=None, help=None),
+        # toolbar_options=dict(logo=None, help=None),
     )
     return fig
 
@@ -314,24 +317,9 @@ if on_session_start():
             st.session_state.get("pixel_size", 0.13),
         )
 
-        block_size = st.slider(
-            "Block size",
-            min_value=256,
-            max_value=min(8192, max(h, w)),
-            value=min(2048, max(h, w)),
-            step=256,
-        )
-    if h < block_size:
-        block_size = h
-    if w < block_size:
-        block_size = w
-
-    bx = by = block_size
-    image = pad_image_to_croppable(image, bx, by, uid=file_id + str(bx) + str(by))
+        
     thumbnail = get_resized_image(image, file_id)
 
-    blocks = view_as_blocks(image, (bx, by, 3))
-    x_blocks, y_blocks = blocks.shape[0], blocks.shape[1]
     with st.sidebar:
         with st.expander("Model", expanded=True):
             use_ensemble = st.checkbox(
@@ -382,74 +370,16 @@ if on_session_start():
                     "GPU" if torch.cuda.is_available() else "CPU",
                     disabled=True,
                 )
-
-        which_y = st.session_state.get("which_y", 0)
-        which_x = st.session_state.get("which_x", 0)
-
-        # Display the selected block
-        # Scale factor
-        h, w = image.shape[:2]
-        small_h, small_w = thumbnail.shape[:2]
-        scale_h = h / small_h
-        scale_w = w / small_w
-        # Calculate the coordinates of the block
-        y1 = math.floor(which_y * bx / scale_h)
-        y2 = math.floor((which_y + 1) * bx / scale_h)
-        x1 = math.floor(which_x * by / scale_w)
-        x2 = math.floor((which_x + 1) * by / scale_w)
-        # Draw a rectangle around the selected block
-
-        # Check if the coordinates are within the bounds of the image
-        while y2 > small_h:
-            which_y -= 1
-            y1 = math.floor(which_y * bx / scale_h)
-            y2 = math.floor((which_y + 1) * bx / scale_h)
-        while x2 > small_w:
-            which_x -= 1
-            x1 = math.floor(which_x * by / scale_w)
-            x2 = math.floor((which_x + 1) * by / scale_w)
-
-        st.session_state["which_x"] = which_x
-        st.session_state["which_y"] = which_y
-
-        # Draw a grid on the thumbnail
-        for i in range(0, small_h, int(bx // scale_h)):
-            cv2.line(thumbnail, (0, i), (small_w, i), (255, 255, 255), 1)
-        for i in range(0, small_w, int(by // scale_w)):
-            cv2.line(thumbnail, (i, 0), (i, small_h), (255, 255, 255), 1)
-
-        cv2.rectangle(
-            thumbnail,
-            (x1, y1),
-            (x2, y2),
-            (0, 0, 255),
-            5,
-        )
-
-        st.write("### Select a block")
-
-        coordinates = streamlit_image_coordinates.streamlit_image_coordinates(
-            thumbnail, use_column_width=True
-        )
-
-    if coordinates:
-        which_x = math.floor((w * coordinates["x"] / coordinates["width"]) / bx)
-        which_y = math.floor((h * coordinates["y"] / coordinates["height"]) / by)
-        if which_x != st.session_state.get("which_x", 0):
-            st.session_state["which_x"] = which_x
-        if which_y != st.session_state.get("which_y", 0):
-            st.session_state["which_y"] = which_y
-
-        st.rerun()
+      
 
     # image = blocks[which_y, which_x, 0]
     with st.sidebar:
-        st.image(image, caption="Selected block", use_container_width=True)
+        st.image(image, caption="Current image", use_container_width=True)
 
     st.session_state.model_name = model_name
     st.session_state.image_inference = image
     st.session_state.image_id = (
-        (file_id + str(which_x) + str(which_y) + str(bx) + str(by) + str(model_name))
+        (file_id + str(model_name))
         + ("_use_tta" if use_tta else "_no_tta")
         + ("_detect_errors" if detect_errors else "_no_detect_errors")
     )

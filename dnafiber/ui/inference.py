@@ -18,15 +18,17 @@ def ui_inference(
     prediction_threshold=1 / 3,
     id=None,
 ) -> np.ndarray | Fibers:
-    return ui_inference_cacheless(
-        _model,
-        _image,
-        _device,
-        pixel_size=st.session_state.get("pixel_size", 0.13),
-        use_tta=use_tta,
-        prediction_threshold=prediction_threshold,
-        use_correction=use_correction,
-    )
+    with st.spinner("Running inference..."):
+        pred = ui_inference_cacheless(
+            _model,
+            _image,
+            _device,
+            pixel_size=st.session_state.get("pixel_size", 0.13),
+            use_tta=use_tta,
+            prediction_threshold=prediction_threshold,
+            use_correction=use_correction,
+        )
+    return pred
 
 
 @st.cache_resource
@@ -37,7 +39,7 @@ def get_model(model_name):
     )
     return model
 
-
+@torch.inference_mode()
 def ui_inference_cacheless(
     _model,
     _image,
@@ -58,16 +60,25 @@ def ui_inference_cacheless(
     else:
         correction_model = None
     h, w = _image.shape[:2]
-    with st.spinner("Sliding window segmentation in progress..."):
-        if isinstance(_model, list):
-            output = None
-            for model in _model:
-                with st.spinner(text="Segmenting with model: {}".format(model)):
-                    if isinstance(model, str):
-                        model = get_model(model)
-                        model.eval()
-                    if output is None:
-                        output = infer(
+    if isinstance(_model, list):
+        output = None
+        for model in _model:
+                if isinstance(model, str):
+                    model = get_model(model)
+                    model.eval()
+                if output is None:
+                    output = infer(
+                        model,
+                        image=_image,
+                        device=_device,
+                        use_tta=use_tta,
+                        scale=pixel_size,
+                        only_probabilities=True,
+                        verbose=verbose,
+                    ).cpu()
+                else:
+                    output += (
+                        + infer(
                             model,
                             image=_image,
                             device=_device,
@@ -76,43 +87,31 @@ def ui_inference_cacheless(
                             only_probabilities=True,
                             verbose=verbose,
                         ).cpu()
-                    else:
-                        output = (
-                            output
-                            + infer(
-                                model,
-                                image=_image,
-                                device=_device,
-                                use_tta=use_tta,
-                                scale=pixel_size,
-                                only_probabilities=True,
-                                verbose=verbose,
-                            ).cpu()
-                        )
-            output = output / len(_model)
+                    )
+        output = output / len(_model)
 
-        else:
-            output = infer(
-                _model,
-                image=_image,
-                device=_device,
-                scale=pixel_size,
-                use_tta=use_tta,
-                only_probabilities=True,
-                verbose=verbose,
-            )
+    else:
+        output = infer(
+            _model,
+            image=_image,
+            device=_device,
+            scale=pixel_size,
+            use_tta=use_tta,
+            only_probabilities=True,
+            verbose=verbose,
+        )
 
-        output = output.cpu().numpy()
+    output = output.cpu().numpy()
 
-        pos_prob = 1 - output[0, 0, :, :]
+    pos_prob = 1 - output[0, 0, :, :]
 
-        pos_prob = binary_closing(pos_prob >= prediction_threshold, np.ones((3, 3)))
-        pos_prob = remove_small_objects(pos_prob, min_size=50)
+    pos_prob = binary_closing(pos_prob >= prediction_threshold, np.ones((3, 3)))
+    pos_prob = remove_small_objects(pos_prob, min_size=50)
 
-        output[0, 0, pos_prob > 0] = 0
-        output[0, 0, pos_prob == 0] = 1
+    output[0, 0, pos_prob > 0] = 0
+    output[0, 0, pos_prob == 0] = 1
 
-        output = np.argmax(output, axis=1).squeeze()
+    output = np.argmax(output, axis=1).squeeze()
     output = output.astype(np.uint8)
     # output = expand_labels(output, distance=5).astype(np.uint8)
     if only_segmentation:

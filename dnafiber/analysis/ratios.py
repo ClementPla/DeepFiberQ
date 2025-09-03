@@ -192,12 +192,18 @@ def compare_pairs(df, pairs, palette, base_offset=6, column="Ratio"):
                 x1 = index_one + 0.1
                 x2 = index_two - 0.1
                 y = base_offset + pair[2] # y position for the asterisks
-                plt.plot([x1, x1, x2, x2], [y, y + 0.5, y + 0.5, y], lw=1.5, color="black")
+                plt.plot([x1, x1, x2, x2], [y, y + 0.05*y, y + 0.05*y, y], lw=1.5, color="black")
                 plt.text(x=(x1 + x2) / 2 + (-0.3 if grader=="Human" else 0.3), y=y, 
                         s=asterisks, ha='center', va="bottom",fontsize=12, color=color)
 
 
-def create_boxen_swarmplot(df, palette, yrange=(0.125, 32), column="Ratio", log_scale=True, stripplot=False, rotate_xticks=45, size=3, **kwargs):
+def create_boxen_swarmplot(df, palette, yrange=(0.125, 32), 
+                           column="Ratio", 
+                           log_scale=True, 
+                           stripplot=False, 
+                           rotate_xticks=45,
+                           size=3, 
+                           **kwargs):
     create_boxen_plot(
     df,
     palette=palette,
@@ -208,7 +214,7 @@ def create_boxen_swarmplot(df, palette, yrange=(0.125, 32), column="Ratio", log_
     create_swarm_plot(
         df,
         include_median=False,
-        palette=["#659c94", "#b87c5f"],
+        palette=palette,
         yrange=yrange,
         stripplot=stripplot,
         alpha=0.8,

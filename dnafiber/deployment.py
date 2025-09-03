@@ -44,6 +44,7 @@ def run_one_file(
         image = get_image_cacheless(file, reverse_channels, bit_depth=bit_depth)
     start = time.time()
     prediction = ui_inference_cacheless(
+        
         _model=model,
         _image=image,
         pixel_size=pixel_size,

@@ -272,7 +272,7 @@ def refine_segmentation(
     image, segmentation, x_offset=0, y_offset=0, correction_model=None, device=None,
     verbose=False
 ):
-    skeleton = skeletonize(segmentation > 0, method="zhang").astype(np.uint8)
+    skeleton = skeletonize(segmentation > 0).astype(np.uint8)
     skeleton_gt = skeleton * segmentation
 
     fibers = extract_fibers(

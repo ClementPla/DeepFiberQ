@@ -18,7 +18,7 @@ from streamlit_bokeh import streamlit_bokeh
 from PIL import Image
 import io
 from dnafiber.data.utils import CMAP, pad_image_to_croppable
-from dnafiber.deployment import MODELS_ZOO, MODELS_ZOO_R
+from dnafiber.deployment import MODELS_ZOO, MODELS_ZOO_R, ENSEMBLE
 from dnafiber.ui.components import show_fibers_cacheless, table_components
 from dnafiber.ui.inference import get_model, ui_inference, ui_inference_cacheless
 from dnafiber.ui.utils import (
@@ -67,9 +67,9 @@ def start_inference(use_tta=True, use_correction=True, prediction_threshold=1 / 
 
     if "ensemble" in st.session_state.model_name:
         model = []
-        for _ in range(len(MODELS_ZOO)):
-            with st.spinner(f"Loading model {_ + 1}/{len(MODELS_ZOO)}..."):
-                model.append(get_model(MODELS_ZOO[list(MODELS_ZOO.keys())[_]]))
+        for _ in range(len(ENSEMBLE)):
+            with st.spinner(f"Loading model {_ + 1}/{len(ENSEMBLE)}..."):
+                model.append(get_model(ENSEMBLE[_]))
     else:
         with st.spinner("Loading model..."):
             model = get_model(st.session_state.model_name)
@@ -153,7 +153,6 @@ def display_prediction(_prediction, _image, image_id=None, show_errors=True):
             x : x + data.shape[1],
         ][data > 0] = data[data > 0]
     p1 = figure(
-        
         title=f"Detected fibers: {len(_prediction)} ({sum([1 for r in _prediction if not r.is_valid])} filtered)",
         tools="pan,wheel_zoom,box_zoom,reset,save",
         active_scroll="wheel_zoom",
@@ -322,7 +321,6 @@ if on_session_start():
             st.session_state.get("bit_depth", 14),
         )
 
-        
     thumbnail = get_resized_image(image, file_id)
 
     with st.sidebar:
@@ -375,7 +373,6 @@ if on_session_start():
                     "GPU" if torch.cuda.is_available() else "CPU",
                     disabled=True,
                 )
-      
 
     # image = blocks[which_y, which_x, 0]
     with st.sidebar:
@@ -386,8 +383,11 @@ if on_session_start():
     st.session_state.image_id = (
         (file_id + str(model_name))
         + ("_use_tta" if use_tta else "_no_tta")
-        + ("_detect_errors" if detect_errors else "_no_detect_errors") + f"_{prediction_threshold:.2f}" 
-        + f"_{h}x{w}" + f"_{st.session_state.get('pixel_size', 0.13)}um" + f"_{'ensemble' if use_ensemble else model_name}"
+        + ("_detect_errors" if detect_errors else "_no_detect_errors")
+        + f"_{prediction_threshold:.2f}"
+        + f"_{h}x{w}"
+        + f"_{st.session_state.get('pixel_size', 0.13)}um"
+        + f"_{'ensemble' if use_ensemble else model_name}"
         + f"_{'rev' if st.session_state.get('reverse_channels', False) else 'no_rev'}"
         + f"_{st.session_state.get('bit_depth', 14)}bit"
     )

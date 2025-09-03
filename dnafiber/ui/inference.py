@@ -7,8 +7,8 @@ import torch
 from dnafiber.postprocess.error_detection import load_model
 from skimage.morphology import binary_closing, remove_small_objects
 from dnafiber.postprocess.fiber import Fibers
-
-@st.cache_resource
+import kornia as K
+# @st.cache_resource
 def ui_inference(
     _model,
     _image,
@@ -61,32 +61,31 @@ def ui_inference_cacheless(
     h, w = _image.shape[:2]
     if isinstance(_model, list):
         output = None
-        for model in _model:
-                if isinstance(model, str):
-                    model = get_model(model)
-                    model.eval()
-                if output is None:
-                    output = infer(
-                        model,
-                        image=_image,
-                        device=_device,
-                        use_tta=use_tta,
-                        scale=pixel_size,
-                        only_probabilities=True,
-                        verbose=verbose,
-                    ).cpu()
-                else:
-                    output = output + (infer(
+        with torch.inference_mode():
+            for model in _model:
+                    if isinstance(model, str):
+                        model = get_model(model)
+                        model.eval()
+                    if output is None:
+                        output = infer(
                             model,
                             image=_image,
                             device=_device,
                             use_tta=use_tta,
                             scale=pixel_size,
-                            only_probabilities=True,
                             verbose=verbose,
                         ).cpu()
-                    )
-        output = output / len(_model)
+                    else:
+                        output += (infer(
+                                model,
+                                image=_image,
+                                device=_device,
+                                use_tta=use_tta,
+                                scale=pixel_size,
+                                verbose=verbose,
+                            )
+                        ).cpu()
+            output = output / len(_model)
 
     else:
         output = infer(
@@ -95,9 +94,10 @@ def ui_inference_cacheless(
             device=_device,
             scale=pixel_size,
             use_tta=use_tta,
-            only_probabilities=True,
             verbose=verbose,
-        )
+        ).cpu()
+
+
 
     output = output.cpu().numpy()
 
@@ -111,7 +111,8 @@ def ui_inference_cacheless(
 
     output = np.argmax(output, axis=1).squeeze()
     output = output.astype(np.uint8)
-    # output = expand_labels(output, distance=5).astype(np.uint8)
+    if verbose:
+        print("Segmentation done...")
     if only_segmentation:
         return output
     with st.spinner("Post-processing segmentation..."):

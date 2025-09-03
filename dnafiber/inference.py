@@ -89,8 +89,6 @@ def infer(
     device,
     scale=0.13,
     use_tta=False,
-    to_numpy=True,
-    only_probabilities=False,
     verbose=False,
 ):
     if isinstance(model, str):
@@ -123,11 +121,10 @@ def infer(
             mode="bilinear",
         )
         probabilities = inferer(tensor)
-        probabilities = probabilities.cpu()
 
         probabilities = F.interpolate(
             probabilities,
             size=(h, w),
             mode="bilinear",
         )
-        return probabilities
+    return probabilities

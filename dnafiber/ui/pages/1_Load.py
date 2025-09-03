@@ -1,6 +1,10 @@
 import streamlit as st
 from pathlib import Path
+from PIL import Image
 
+
+# Or, disable the limit entirely (use with caution)
+Image.MAX_IMAGE_PIXELS = None 
 st.set_page_config(
     page_title="DN-AI",
     page_icon="🔬",

@@ -1,10 +1,8 @@
 import os
-from turtle import st
 import streamlit.components.v1 as components
-import streamlit as st
 from dnafiber.data.utils import numpy_to_base64_jpeg
 
-_RELEASE = False
+_RELEASE = True
 
 
 if not _RELEASE:
@@ -35,9 +33,7 @@ def fiber_ui(image, fibers, key=None):
 
     """
 
-    # convert image to base64
-    with st.spinner("Preparing image..."):
-        data_uri = numpy_to_base64_jpeg(image)
+    data_uri = numpy_to_base64_jpeg(image)
     component_value = _component_func(
         image=data_uri,
         elements=fibers,

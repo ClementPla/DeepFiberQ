@@ -1,7 +1,14 @@
+from __future__ import annotations
+
 import json
+import numpy as np
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from dnafiber.postprocess.fiber import FiberProps
 
 
-def generate_svg(fiber, scale=1.0) -> str:
+def generate_svg(fiber: FiberProps, scale=1.0) -> str:
     """Generate an SVG representation of the fiber for visualization purposes.
     Parameters
     ----------
@@ -14,6 +21,7 @@ def generate_svg(fiber, scale=1.0) -> str:
 
     bbox_data = fiber.bbox.to_dict()
     trace_data = fiber.get_trace()
+
     offset_x, offset_y = bbox_data["x"], bbox_data["y"]
     data = fiber.data[trace_data[:, 0], trace_data[:, 1]]
 
@@ -62,4 +70,8 @@ def generate_svg(fiber, scale=1.0) -> str:
     bbox_data["y"] = int(bbox_data["y"] * scale)
     bbox_data["width"] = int(bbox_data["width"] * scale)
     bbox_data["height"] = int(bbox_data["height"] * scale)
+    bbox_data["id"] = fiber.fiber_id
+    bbox_data["type"] = fiber.fiber_type
+    bbox_data["ratio"] = fiber.ratio if not np.isnan(fiber.ratio) else -1
+    bbox_data["is_error"] = bool(fiber.is_an_error[0])
     return json.dumps(bbox_data)

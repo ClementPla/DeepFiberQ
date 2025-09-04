@@ -4,11 +4,14 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@base-ui-components/react": "^1.0.0-beta.3",
     "baseui": "^15.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-zoom-pan-pinch": "^3.7.0",
-    "streamlit-component-lib": "^2.0.0"
+    "streamlit-component-lib": "^2.0.0",
+    "styletron-engine-atomic": "^1.6.2",
+    "styletron-react": "^6.1.1"
   },
   "scripts": {
     "start": "vite",
@@ -31,6 +34,7 @@
   },
   "homepage": ".",
   "devDependencies": {
+    "@types/baseui": "^7.3.7",
     "@types/node": "^22.14.1",
     "@types/react": "^18.3.20",
     "@types/react-dom": "^18.3.6",

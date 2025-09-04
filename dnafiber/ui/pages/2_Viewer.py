@@ -22,7 +22,6 @@ from dnafiber.deployment import MODELS_ZOO, MODELS_ZOO_R, ENSEMBLE
 from dnafiber.ui.components import show_fibers_cacheless, table_components
 from dnafiber.ui.inference import get_model, ui_inference, ui_inference_cacheless
 from dnafiber.ui.utils import (
-    bokeh_imshow,
     get_image,
     get_multifile_image,
     get_resized_image,
@@ -33,7 +32,20 @@ st.set_page_config(
     layout="wide",
     page_icon=":microscope:",
 )
-st.title("Viewer")
+
+st.markdown(
+    """
+        <style>
+               .block-container {
+                    padding-top: 1rem;
+                    padding-bottom: 0rem;
+                    padding-left: 5rem;
+                    padding-right: 5rem;
+                }
+        </style>
+        """,
+    unsafe_allow_html=True,
+)
 
 
 def on_session_start():
@@ -64,6 +76,7 @@ def on_session_start():
 
 def start_inference(use_tta=True, use_correction=True, prediction_threshold=1 / 3):
     image = st.session_state.image_inference
+    org_h, org_w = image.shape[:2]
     image = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
 
     if "ensemble" in st.session_state.model_name:
@@ -84,23 +97,12 @@ def start_inference(use_tta=True, use_correction=True, prediction_threshold=1 / 
         id=st.session_state.image_id,
     )
 
-    # prediction = [
-    #     p
-    #     for p in prediction
-    #     if (p.fiber_type != "single") and p.fiber_type != "multiple"
-    # ]
-    show_errors = st.checkbox(
-        "Show fibers with errors",
-        value=True,
-        help="Show fibers that were filtered out by the error detection model.",
-    )
     tab_viewer, tab_fibers = st.tabs(["Viewer", "Fibers"])
     with tab_fibers:
         df = show_fibers_cacheless(
             _prediction=prediction,
             _image=image,
             image_id=st.session_state.image_id,
-            show_errors=show_errors,
         )
         table_components(df)
 
@@ -111,7 +113,7 @@ def start_inference(use_tta=True, use_correction=True, prediction_threshold=1 / 
                     image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
                 )
 
-        max_size = 8192
+        max_size = 20000
         h, w = image.shape[:2]
         size = max(h, w)
         scale = 1.0
@@ -130,153 +132,27 @@ def start_inference(use_tta=True, use_correction=True, prediction_threshold=1 / 
                 )
 
         fiber_ui(image, prediction.valid_copy().svgs(scale=scale))
+        with st.spinner("Preparing downloadable results..."):
+            labelmap = prediction.filtered_copy().get_labelmap(org_h, org_w, 3)
+            labelmap = (CMAP(labelmap)[:, :, :3] * 255).astype(np.uint8)
 
-        # fig = display_prediction(
-        #     _prediction=prediction,
-        #     _image=image,
-        #     image_id=st.session_state.image_id,
-        #     show_errors=show_errors,
-        # )
-        # streamlit_bokeh(fig, use_container_width=True)
+            image = Image.fromarray(labelmap)
 
+            # Create an in-memory binary stream
+            buffer = io.BytesIO()
 
-# def display_prediction(_prediction, _image, image_id=None, show_errors=True):
-#     max_width = 4096
-#     image = _image
-#     if image.max() > 25:
-#         image = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-#     scale = 1
-#     # Resize the image to max_width
-#     max_dim = max(image.shape[0], image.shape[1])
-#     if max_dim > max_width:
-#         scale = max_width / max_dim
-#         image = cv2.resize(
-#             image,
-#             None,
-#             fx=scale,
-#             fy=scale,
-#             interpolation=cv2.INTER_LINEAR,
-#         )
+            # Save the image to the buffer in PNG format
+            image.save(buffer, format="jpeg")
 
-#     h, w = image.shape[:2]
-#     labels_maps = np.zeros((h, w), dtype=np.uint8)
-#     for i, region in enumerate(_prediction):
-#         if not show_errors and not region.is_valid:
-#             continue
-#         x, y, w, h = region.scaled_coordinates(scale)
-#         data = cv2.resize(
-#             expand_labels(region.data, 2),
-#             None,
-#             fx=scale,
-#             fy=scale,
-#             interpolation=cv2.INTER_NEAREST,
-#         )
-#         labels_maps[
-#             y : y + data.shape[0],
-#             x : x + data.shape[1],
-#         ][data > 0] = data[data > 0]
-#     p1 = figure(
-#         title=f"Detected fibers: {len(_prediction)} ({sum([1 for r in _prediction if not r.is_valid])} filtered)",
-#         tools="pan,wheel_zoom,box_zoom,reset,save",
-#         active_scroll="wheel_zoom",
-#     )
-
-#     p1.image(
-#         image=[labels_maps],
-#         x=0,
-#         y=0,
-#         dw=labels_maps.shape[1],
-#         dh=labels_maps.shape[0],
-#         palette=["black", st.session_state["color1"], st.session_state["color2"]]
-#         if np.max(labels_maps) > 0
-#         else ["black"],
-#     )
-#     p2 = figure(
-#         x_range=p1.x_range,
-#         y_range=p1.y_range,
-#         tools="pan,wheel_zoom,box_zoom,reset,save",
-#         active_scroll="wheel_zoom",
-#     )
-#     # Hide the toolbar of p2
-#     p2.toolbar_location = None
-#     bokeh_imshow(p2, image)
-#     colors = [c.hex for c in PALETTE.latte.colors][:14]
-#     data_source = dict(
-#         x=[],
-#         y=[],
-#         width=[],
-#         height=[],
-#         color=[],
-#         firstAnalog=[],
-#         secondAnalog=[],
-#         ratio=[],
-#         fill_color=[],
-#         fiber_id=[],
-#         line_width=[],
-#     )
-#     np.random.shuffle(colors)
-#     for i, region in enumerate(_prediction):
-#         if not show_errors and not region.is_valid:
-#             continue
-#         color = colors[i % len(colors)]
-#         x, y, w, h = region.scaled_coordinates(scale)
-#         is_valid = region.is_valid
-#         fiberId = region.fiber_id
-#         data_source["x"].append((x + w / 2))
-#         data_source["y"].append((y + h / 2))
-#         data_source["width"].append(w)
-#         data_source["height"].append(h)
-#         data_source["color"].append(color if is_valid else "#ffffff")
-#         data_source["line_width"].append(2 if is_valid else 3)
-#         data_source["fill_color"].append("#ffffff00" if is_valid else ("#ff0000b2"))
-#         r, g = region.counts
-#         red_length = st.session_state["pixel_size"] * r / scale
-#         green_length = st.session_state["pixel_size"] * g / scale
-#         data_source["firstAnalog"].append(f"{red_length:.2f} µm")
-#         data_source["secondAnalog"].append(f"{green_length:.2f} µm")
-#         data_source["ratio"].append(f"{green_length / red_length:.2f}")
-#         data_source["fiber_id"].append(fiberId)
-
-#     rect1 = p1.rect(
-#         x="x",
-#         y="y",
-#         width="width",
-#         height="height",
-#         source=data_source,
-#         fill_color="fill_color",
-#         line_color="color",
-#         line_width="line_width",
-#     )
-#     rect2 = p2.rect(
-#         x="x",
-#         y="y",
-#         width="width",
-#         height="height",
-#         source=data_source,
-#         fill_color=None,
-#         line_color="color",
-#         line_width="line_width",
-#     )
-
-#     hover = HoverTool(
-#         tooltips=f'<b>Fiber ID: @fiber_id</b><br><p style="color:{st.session_state["color1"]};">@firstAnalog</p> <p style="color:{st.session_state["color2"]};">@secondAnalog</p><b> Ratio: @ratio</b>',
-#     )
-#     hover.renderers = [rect1, rect2]
-#     hover.point_policy = "follow_mouse"
-#     hover.attachment = "vertical"
-#     p1.add_tools(hover)
-#     p2.add_tools(hover)
-
-#     p1.axis.visible = False
-#     p2.axis.visible = False
-#     fig = row(
-#         p2,
-#         p1,
-#         # merge_tools=True,
-#         sizing_mode="stretch_width",
-#         # toolbar_options=dict(logo=None, help=None),
-#     )
-#     return fig
+            # Get the byte data from the buffer
+            jpeg_data = buffer.getvalue()
+        with st.expander("Download results", expanded=True):
+            st.download_button(
+                "Download segmented image",
+                data=jpeg_data,
+                file_name="segmented_image.jpg",
+                mime="image/jpeg",
+            )
 
 
 def create_display_files(files):
@@ -300,12 +176,13 @@ def create_display_files(files):
 if on_session_start():
     files = st.session_state.files_uploaded
     displayed_names = create_display_files(files)
-    selected_file = st.selectbox(
-        "Pick an image",
-        displayed_names,
-        index=0,
-        help="Select an image to view and analyze.",
-    )
+    with st.sidebar:
+        selected_file = st.selectbox(
+            "Pick an image",
+            displayed_names,
+            index=0,
+            help="Select an image to view and analyze.",
+        )
 
     # Find index of the selected file
     index = displayed_names.index(selected_file)
@@ -328,10 +205,6 @@ if on_session_start():
             bit_depth=st.session_state.get("bit_depth", 14),
         )
 
-    download_button = st.button(
-        "Download full segmentation",
-        help="Download the full segmented image as a PNG file.",
-    )
     org_image = image.copy()
     h, w = image.shape[:2]
     with st.sidebar:
@@ -415,40 +288,6 @@ if on_session_start():
         + f"_{st.session_state.get('bit_depth', 14)}bit"
     )
     col1, col2, col3 = st.columns([1, 1, 1])
-
-    if download_button:
-        st.success("Infering on the full segmented image...")
-        prediction = ui_inference_cacheless(
-            _model=model_name if not use_ensemble else "ensemble",
-            _image=org_image,
-            _device="cuda" if torch.cuda.is_available() else "cpu",
-            use_tta=use_tta,
-            use_correction=detect_errors,
-            prediction_threshold=prediction_threshold,
-            pixel_size=st.session_state.get("pixel_size", 0.13),
-            verbose=False,
-        )
-        org_h, org_w = org_image.shape[:2]
-        labelmap = prediction.valid_copy().get_labelmap(org_h, org_w, 3)
-        labelmap = (CMAP(labelmap)[:, :, :3] * 255).astype(np.uint8)
-
-        image = Image.fromarray(labelmap)
-
-        # Create an in-memory binary stream
-        buffer = io.BytesIO()
-
-        # Save the image to the buffer in PNG format
-        image.save(buffer, format="jpeg")
-
-        # Get the byte data from the buffer
-        jpeg_data = buffer.getvalue()
-
-        st.download_button(
-            "Download full segmented image",
-            data=jpeg_data,
-            file_name="full_segmented_image.jpg",
-            mime="image/jpeg",
-        )
 
     start_inference(
         use_tta=use_tta,

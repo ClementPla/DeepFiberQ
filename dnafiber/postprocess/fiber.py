@@ -108,6 +108,8 @@ class FiberProps:
             return self.trace
         # Generate trace if not provided
         self.trace = np.asarray(trace_skeleton(self.data > 0))
+        if not self.trace.size:
+            self.trace = np.empty((0, 2), dtype=int)
         return self.trace
 
     @property
@@ -168,7 +170,12 @@ class FiberProps:
         )
 
     def svg_representation(self, scale=1.0):
-        return generate_svg(self, scale=scale)
+        try:
+            svg_representation = generate_svg(self, scale=scale)
+        except Exception as e:
+            print(f"Error generating SVG representation: {e}")
+            return None
+        return svg_representation
 
 
 @attrs.define
@@ -289,7 +296,8 @@ class Fibers:
         return df
 
     def svgs(self, scale=1.0):
-        return [fiber.svg_representation(scale) for fiber in self.fibers]
+        svgs = [fiber.svg_representation(scale) for fiber in self.fibers]
+        return [svg for svg in svgs if svg is not None]
 
 
 def estimate_fiber_category(fiber_trace: np.ndarray, fiber_data: np.ndarray) -> str:

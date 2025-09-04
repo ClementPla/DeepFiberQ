@@ -4,7 +4,7 @@ import streamlit.components.v1 as components
 import streamlit as st
 from dnafiber.data.utils import numpy_to_base64_jpeg
 
-_RELEASE = False
+_RELEASE = True
 
 
 if not _RELEASE:
@@ -44,6 +44,6 @@ def fiber_ui(image, fibers, key=None):
         image_w=image.shape[1],
         image_h=image.shape[0],
         key=key,
-        default=0,
+        default=False,
     )
     return component_value

@@ -13,6 +13,7 @@ from matplotlib.colors import ListedColormap
 
 CMAP = ListedColormap(["#000000", "#ff0000", "#00ff00"])
 
+
 def read_svg(svg_path):
     doc = minidom.parse(str(svg_path))
     img_strings = {
@@ -92,8 +93,8 @@ def read_dv(filepath):
 
     return data
 
-def convert_rgb_to_mask(image, threshold=200):
 
+def convert_rgb_to_mask(image, threshold=200):
     output = np.zeros(image.shape[:2], dtype=np.uint8)
     output[image[:, :, 0] > threshold] = 1
     output[image[:, :, 1] > threshold] = 2

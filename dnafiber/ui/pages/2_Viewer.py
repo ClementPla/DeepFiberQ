@@ -27,6 +27,7 @@ from dnafiber.ui.utils import (
     get_multifile_image,
     get_resized_image,
 )
+from dnafiber.ui.custom import fiber_ui
 
 st.set_page_config(
     layout="wide",
@@ -83,11 +84,11 @@ def start_inference(use_tta=True, use_correction=True, prediction_threshold=1 / 
         id=st.session_state.image_id,
     )
 
-    prediction = [
-        p
-        for p in prediction
-        if (p.fiber_type != "single") and p.fiber_type != "multiple"
-    ]
+    # prediction = [
+    #     p
+    #     for p in prediction
+    #     if (p.fiber_type != "single") and p.fiber_type != "multiple"
+    # ]
     show_errors = st.checkbox(
         "Show fibers with errors",
         value=True,
@@ -104,156 +105,178 @@ def start_inference(use_tta=True, use_correction=True, prediction_threshold=1 / 
         table_components(df)
 
     with tab_viewer:
-        max_width = 10000
-        if image.shape[1] > max_width:
-            st.toast("Images are displayed at a lower resolution of 4096 pixel wide")
+        if image.max() > 25:
+            with st.spinner("Normalizing image..."):
+                image = cv2.normalize(
+                    image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
+                )
 
-        fig = display_prediction(
-            _prediction=prediction,
-            _image=image,
-            image_id=st.session_state.image_id,
-            show_errors=show_errors,
-        )
-        streamlit_bokeh(fig, use_container_width=True)
+        max_size = 8192
+        h, w = image.shape[:2]
+        size = max(h, w)
+        scale = 1.0
+        if size > max_size:
+            st.toast(
+                f"Images are displayed at a lower resolution of {max_size} pixel wide"
+            )
+            scale = max_size / size
+            with st.spinner("Resizing image..."):
+                image = cv2.resize(
+                    image,
+                    None,
+                    fx=scale,
+                    fy=scale,
+                    interpolation=cv2.INTER_LINEAR,
+                )
+
+        fiber_ui(image, prediction.valid_copy().svgs(scale=scale))
+
+        # fig = display_prediction(
+        #     _prediction=prediction,
+        #     _image=image,
+        #     image_id=st.session_state.image_id,
+        #     show_errors=show_errors,
+        # )
+        # streamlit_bokeh(fig, use_container_width=True)
 
 
-def display_prediction(_prediction, _image, image_id=None, show_errors=True):
-    max_width = 4096
-    image = _image
-    if image.max() > 25:
-        image = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-    scale = 1
-    # Resize the image to max_width
-    max_dim = max(image.shape[0], image.shape[1])
-    if max_dim > max_width:
-        scale = max_width / max_dim
-        image = cv2.resize(
-            image,
-            None,
-            fx=scale,
-            fy=scale,
-            interpolation=cv2.INTER_LINEAR,
-        )
+# def display_prediction(_prediction, _image, image_id=None, show_errors=True):
+#     max_width = 4096
+#     image = _image
+#     if image.max() > 25:
+#         image = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+#     scale = 1
+#     # Resize the image to max_width
+#     max_dim = max(image.shape[0], image.shape[1])
+#     if max_dim > max_width:
+#         scale = max_width / max_dim
+#         image = cv2.resize(
+#             image,
+#             None,
+#             fx=scale,
+#             fy=scale,
+#             interpolation=cv2.INTER_LINEAR,
+#         )
 
-    h, w = image.shape[:2]
-    labels_maps = np.zeros((h, w), dtype=np.uint8)
-    for i, region in enumerate(_prediction):
-        if not show_errors and not region.is_valid:
-            continue
-        x, y, w, h = region.scaled_coordinates(scale)
-        data = cv2.resize(
-            expand_labels(region.data, 2),
-            None,
-            fx=scale,
-            fy=scale,
-            interpolation=cv2.INTER_NEAREST,
-        )
-        labels_maps[
-            y : y + data.shape[0],
-            x : x + data.shape[1],
-        ][data > 0] = data[data > 0]
-    p1 = figure(
-        title=f"Detected fibers: {len(_prediction)} ({sum([1 for r in _prediction if not r.is_valid])} filtered)",
-        tools="pan,wheel_zoom,box_zoom,reset,save",
-        active_scroll="wheel_zoom",
-    )
+#     h, w = image.shape[:2]
+#     labels_maps = np.zeros((h, w), dtype=np.uint8)
+#     for i, region in enumerate(_prediction):
+#         if not show_errors and not region.is_valid:
+#             continue
+#         x, y, w, h = region.scaled_coordinates(scale)
+#         data = cv2.resize(
+#             expand_labels(region.data, 2),
+#             None,
+#             fx=scale,
+#             fy=scale,
+#             interpolation=cv2.INTER_NEAREST,
+#         )
+#         labels_maps[
+#             y : y + data.shape[0],
+#             x : x + data.shape[1],
+#         ][data > 0] = data[data > 0]
+#     p1 = figure(
+#         title=f"Detected fibers: {len(_prediction)} ({sum([1 for r in _prediction if not r.is_valid])} filtered)",
+#         tools="pan,wheel_zoom,box_zoom,reset,save",
+#         active_scroll="wheel_zoom",
+#     )
 
-    p1.image(
-        image=[labels_maps],
-        x=0,
-        y=0,
-        dw=labels_maps.shape[1],
-        dh=labels_maps.shape[0],
-        palette=["black", st.session_state["color1"], st.session_state["color2"]]
-        if np.max(labels_maps) > 0
-        else ["black"],
-    )
-    p2 = figure(
-        x_range=p1.x_range,
-        y_range=p1.y_range,
-        tools="pan,wheel_zoom,box_zoom,reset,save",
-        active_scroll="wheel_zoom",
-    )
-    # Hide the toolbar of p2
-    p2.toolbar_location = None
-    bokeh_imshow(p2, image)
-    colors = [c.hex for c in PALETTE.latte.colors][:14]
-    data_source = dict(
-        x=[],
-        y=[],
-        width=[],
-        height=[],
-        color=[],
-        firstAnalog=[],
-        secondAnalog=[],
-        ratio=[],
-        fill_color=[],
-        fiber_id=[],
-        line_width=[],
-    )
-    np.random.shuffle(colors)
-    for i, region in enumerate(_prediction):
-        if not show_errors and not region.is_valid:
-            continue
-        color = colors[i % len(colors)]
-        x, y, w, h = region.scaled_coordinates(scale)
-        is_valid = region.is_valid
-        fiberId = region.fiber_id
-        data_source["x"].append((x + w / 2))
-        data_source["y"].append((y + h / 2))
-        data_source["width"].append(w)
-        data_source["height"].append(h)
-        data_source["color"].append(color if is_valid else "#ffffff")
-        data_source["line_width"].append(2 if is_valid else 3)
-        data_source["fill_color"].append("#ffffff00" if is_valid else ("#ff0000b2"))
-        r, g = region.counts
-        red_length = st.session_state["pixel_size"] * r / scale
-        green_length = st.session_state["pixel_size"] * g / scale
-        data_source["firstAnalog"].append(f"{red_length:.2f} µm")
-        data_source["secondAnalog"].append(f"{green_length:.2f} µm")
-        data_source["ratio"].append(f"{green_length / red_length:.2f}")
-        data_source["fiber_id"].append(fiberId)
+#     p1.image(
+#         image=[labels_maps],
+#         x=0,
+#         y=0,
+#         dw=labels_maps.shape[1],
+#         dh=labels_maps.shape[0],
+#         palette=["black", st.session_state["color1"], st.session_state["color2"]]
+#         if np.max(labels_maps) > 0
+#         else ["black"],
+#     )
+#     p2 = figure(
+#         x_range=p1.x_range,
+#         y_range=p1.y_range,
+#         tools="pan,wheel_zoom,box_zoom,reset,save",
+#         active_scroll="wheel_zoom",
+#     )
+#     # Hide the toolbar of p2
+#     p2.toolbar_location = None
+#     bokeh_imshow(p2, image)
+#     colors = [c.hex for c in PALETTE.latte.colors][:14]
+#     data_source = dict(
+#         x=[],
+#         y=[],
+#         width=[],
+#         height=[],
+#         color=[],
+#         firstAnalog=[],
+#         secondAnalog=[],
+#         ratio=[],
+#         fill_color=[],
+#         fiber_id=[],
+#         line_width=[],
+#     )
+#     np.random.shuffle(colors)
+#     for i, region in enumerate(_prediction):
+#         if not show_errors and not region.is_valid:
+#             continue
+#         color = colors[i % len(colors)]
+#         x, y, w, h = region.scaled_coordinates(scale)
+#         is_valid = region.is_valid
+#         fiberId = region.fiber_id
+#         data_source["x"].append((x + w / 2))
+#         data_source["y"].append((y + h / 2))
+#         data_source["width"].append(w)
+#         data_source["height"].append(h)
+#         data_source["color"].append(color if is_valid else "#ffffff")
+#         data_source["line_width"].append(2 if is_valid else 3)
+#         data_source["fill_color"].append("#ffffff00" if is_valid else ("#ff0000b2"))
+#         r, g = region.counts
+#         red_length = st.session_state["pixel_size"] * r / scale
+#         green_length = st.session_state["pixel_size"] * g / scale
+#         data_source["firstAnalog"].append(f"{red_length:.2f} µm")
+#         data_source["secondAnalog"].append(f"{green_length:.2f} µm")
+#         data_source["ratio"].append(f"{green_length / red_length:.2f}")
+#         data_source["fiber_id"].append(fiberId)
 
-    rect1 = p1.rect(
-        x="x",
-        y="y",
-        width="width",
-        height="height",
-        source=data_source,
-        fill_color="fill_color",
-        line_color="color",
-        line_width="line_width",
-    )
-    rect2 = p2.rect(
-        x="x",
-        y="y",
-        width="width",
-        height="height",
-        source=data_source,
-        fill_color=None,
-        line_color="color",
-        line_width="line_width",
-    )
+#     rect1 = p1.rect(
+#         x="x",
+#         y="y",
+#         width="width",
+#         height="height",
+#         source=data_source,
+#         fill_color="fill_color",
+#         line_color="color",
+#         line_width="line_width",
+#     )
+#     rect2 = p2.rect(
+#         x="x",
+#         y="y",
+#         width="width",
+#         height="height",
+#         source=data_source,
+#         fill_color=None,
+#         line_color="color",
+#         line_width="line_width",
+#     )
 
-    hover = HoverTool(
-        tooltips=f'<b>Fiber ID: @fiber_id</b><br><p style="color:{st.session_state["color1"]};">@firstAnalog</p> <p style="color:{st.session_state["color2"]};">@secondAnalog</p><b> Ratio: @ratio</b>',
-    )
-    hover.renderers = [rect1, rect2]
-    hover.point_policy = "follow_mouse"
-    hover.attachment = "vertical"
-    p1.add_tools(hover)
-    p2.add_tools(hover)
+#     hover = HoverTool(
+#         tooltips=f'<b>Fiber ID: @fiber_id</b><br><p style="color:{st.session_state["color1"]};">@firstAnalog</p> <p style="color:{st.session_state["color2"]};">@secondAnalog</p><b> Ratio: @ratio</b>',
+#     )
+#     hover.renderers = [rect1, rect2]
+#     hover.point_policy = "follow_mouse"
+#     hover.attachment = "vertical"
+#     p1.add_tools(hover)
+#     p2.add_tools(hover)
 
-    p1.axis.visible = False
-    p2.axis.visible = False
-    fig = row(
-        p2,
-        p1,
-        # merge_tools=True,
-        sizing_mode="stretch_width",
-        # toolbar_options=dict(logo=None, help=None),
-    )
-    return fig
+#     p1.axis.visible = False
+#     p2.axis.visible = False
+#     fig = row(
+#         p2,
+#         p1,
+#         # merge_tools=True,
+#         sizing_mode="stretch_width",
+#         # toolbar_options=dict(logo=None, help=None),
+#     )
+#     return fig
 
 
 def create_display_files(files):

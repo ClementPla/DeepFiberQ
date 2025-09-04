@@ -8,7 +8,7 @@ from scipy.sparse.csgraph import connected_components
 from scipy.sparse import csr_array
 from skimage.morphology import skeletonize
 from dnafiber.postprocess.skan import find_line_intersection, prolongate_endpoints
-from dnafiber.postprocess.fiber import Fiber, FiberProps, Bbox, Fibers
+from dnafiber.postprocess.fiber import FiberProps, Bbox, Fibers
 from itertools import compress
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
@@ -165,7 +165,7 @@ def handle_multiple_fiber_in_cc(fiber, junctions_fiber, coordinates):
             max_y - min_y,
         )
         bbox = Bbox(x=bbox[0], y=bbox[1], width=bbox[2], height=bbox[3])
-        result = Fiber(bbox=bbox, data=new_fiber)
+        result = FiberProps(bbox=bbox, data=new_fiber)
         results.append(result)
     return results
 
@@ -189,12 +189,13 @@ def handle_ccs_with_junctions(
 
 
 def extract_fibers(
-    skeleton,
-    skeleton_gt,
+    mask,
     post_process,
     x_offset: int = 0,
     y_offset: int = 0,
 ):
+    skeleton = skeletonize(mask > 0, method="lee").astype(np.uint8)
+    skeleton_gt = skeleton * mask
     retval, labels, stats, centroids = cv2.connectedComponentsWithStatsWithAlgorithm(
         skeleton, connectivity=8, ccltype=cv2.CCL_BOLELLI, ltype=cv2.CV_16U
     )
@@ -223,14 +224,18 @@ def extract_fibers(
         local_junctions = find_line_intersection(local_fiber > 0)
         local_junctions = np.where(local_junctions)
         local_junctions = np.array(local_junctions).transpose()
+
         junctions.append(local_junctions)
 
-    fibers = []
+    fiberprops = []
     if post_process:
         has_junctions = [len(j) > 0 for j in junctions]
-        for fiber, coordinate in zip(
-            compress(local_fibers, np.logical_not(has_junctions)),
-            compress(coordinates, np.logical_not(has_junctions)),
+
+        for i, (fiber, coordinate) in enumerate(
+            zip(
+                compress(local_fibers, np.logical_not(has_junctions)),
+                compress(coordinates, np.logical_not(has_junctions)),
+            )
         ):
             bbox = Bbox(
                 x=coordinate[0],
@@ -238,10 +243,10 @@ def extract_fibers(
                 width=coordinate[2],
                 height=coordinate[3],
             )
-            fibers.append(Fiber(bbox=bbox, data=fiber))
+            fiberprops.append(FiberProps(bbox=bbox, data=fiber, fiber_id=i))
         # Handle fibers with junctions
         try:
-            fibers += handle_ccs_with_junctions(
+            fiberprops += handle_ccs_with_junctions(
                 compress(local_fibers, has_junctions),
                 compress(junctions, has_junctions),
                 compress(coordinates, has_junctions),
@@ -250,41 +255,44 @@ def extract_fibers(
             # If there is an IndexError, it means that there are no fibers with junctions
             pass
     else:
-        for fiber, coordinate in zip(local_fibers, coordinates):
+        for i, (fiber, coordinate) in enumerate(zip(local_fibers, coordinates)):
             bbox = Bbox(
                 x=coordinate[0],
                 y=coordinate[1],
                 width=coordinate[2],
                 height=coordinate[3],
             )
-            fibers.append(Fiber(bbox=bbox, data=fiber))
-
-    fiberprops = [FiberProps(fiber=f, fiber_id=i) for i, f in enumerate(fibers)]
+            fiberprops.append(FiberProps(bbox=bbox, data=fiber, fiber_id=i))
 
     for fiber in fiberprops:
-        fiber.fiber.bbox.x += x_offset
-        fiber.fiber.bbox.y += y_offset
+        fiber.bbox.x += x_offset
+        fiber.bbox.y += y_offset
 
     return fiberprops
 
 
 def refine_segmentation(
-    image, segmentation, x_offset=0, y_offset=0, correction_model=None, device=None,
-    verbose=False
+    image,
+    segmentation,
+    x_offset=0,
+    y_offset=0,
+    correction_model=None,
+    device=None,
+    verbose=False,
 ):
-    skeleton = skeletonize(segmentation > 0).astype(np.uint8)
-    skeleton_gt = skeleton * segmentation
-
     fibers = extract_fibers(
-        skeleton,
-        skeleton_gt,
+        segmentation,
         post_process=True,
         x_offset=x_offset,
         y_offset=y_offset,
     )
     if correction_model is not None:
         fibers = correct_fibers(
-            fibers, image, correction_model=correction_model, device=device, verbose=verbose
+            fibers,
+            image,
+            correction_model=correction_model,
+            device=device,
+            verbose=verbose,
         )
 
     fibers = Fibers(fibers=fibers)

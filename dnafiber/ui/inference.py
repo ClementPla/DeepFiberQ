@@ -8,7 +8,9 @@ from dnafiber.postprocess.error_detection import load_model
 from skimage.morphology import binary_closing, remove_small_objects
 from dnafiber.postprocess.fiber import Fibers
 import kornia as K
-# @st.cache_resource
+
+
+@st.cache_resource
 def ui_inference(
     _model,
     _image,
@@ -39,6 +41,7 @@ def get_model(model_name):
     )
     return model
 
+
 def ui_inference_cacheless(
     _model,
     _image,
@@ -62,7 +65,8 @@ def ui_inference_cacheless(
     if isinstance(_model, list):
         output = None
         with torch.inference_mode():
-            for model in _model:
+            with st.spinner("Running ensemble inference..."):
+                for model in _model:
                     if isinstance(model, str):
                         model = get_model(model)
                         model.eval()
@@ -76,7 +80,8 @@ def ui_inference_cacheless(
                             verbose=verbose,
                         ).cpu()
                     else:
-                        output += (infer(
+                        output += (
+                            infer(
                                 model,
                                 image=_image,
                                 device=_device,
@@ -85,32 +90,31 @@ def ui_inference_cacheless(
                                 verbose=verbose,
                             )
                         ).cpu()
-            output = output / len(_model)
+                output = output / len(_model)
 
     else:
-        output = infer(
-            _model,
-            image=_image,
-            device=_device,
-            scale=pixel_size,
-            use_tta=use_tta,
-            verbose=verbose,
-        ).cpu()
+        with torch.inference_mode():
+            output = infer(
+                _model,
+                image=_image,
+                device=_device,
+                scale=pixel_size,
+                use_tta=use_tta,
+                verbose=verbose,
+            ).cpu()
 
+    with st.spinner("Processing model output..."):
+        output = output.cpu().numpy()
 
+        pos_prob = 1 - output[0, 0, :, :]
 
-    output = output.cpu().numpy()
+        pos_prob = binary_closing(pos_prob >= prediction_threshold, np.ones((3, 3)))
 
-    pos_prob = 1 - output[0, 0, :, :]
+        output[0, 0, pos_prob > 0] = 0
+        output[0, 0, pos_prob == 0] = 1
 
-    pos_prob = binary_closing(pos_prob >= prediction_threshold, np.ones((3, 3)))
-    pos_prob = remove_small_objects(pos_prob, min_size=50)
-
-    output[0, 0, pos_prob > 0] = 0
-    output[0, 0, pos_prob == 0] = 1
-
-    output = np.argmax(output, axis=1).squeeze()
-    output = output.astype(np.uint8)
+        output = np.argmax(output, axis=1).squeeze()
+        output = output.astype(np.uint8)
     if verbose:
         print("Segmentation done...")
     if only_segmentation:

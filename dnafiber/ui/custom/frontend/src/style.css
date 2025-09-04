@@ -1,0 +1,62 @@
+/* grayscale patches hidden by default */
+.gray-patch {
+    display: none;
+    pointer-events: none;
+}
+
+/* show grayscale patch when rect is hovered */
+.rect-group:hover .gray-patch {
+    display: inline;
+}
+
+/* paths hidden unless rect hovered */
+.hover-paths {
+    display: inline;
+}
+
+.rect-group:hover .hover-paths {
+    display: inline;
+}
+
+.rect-group:hover .hover-paths .fibers {
+    opacity: 1.0;
+    stroke-dasharray: 500;
+    stroke-dashoffset: 500;
+    animation: dash 2s infinite;
+}
+
+/* bounding box inflation */
+.hover-target {
+    transform-box: fill-box;
+    transform-origin: center;
+    transition: transform 0.18s ease;
+    pointer-events: all;
+}
+
+.rect-group:hover .hover-target {
+    transform: scale(1.5);
+    stroke-width: 2px;
+    z-index: 1000;
+
+}
+
+.fibers {
+    stroke-linecap: round;
+
+}
+
+
+@keyframes dash {
+    to {
+        stroke-dashoffset: 0;
+    }
+}
+
+.hidden {
+    opacity: 0;
+
+}
+
+.image {
+    transition: opacity 0.5s ease-in-out;
+}

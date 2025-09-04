@@ -3,6 +3,7 @@ import numpy as np
 from typing import Optional, Tuple
 from dnafiber.postprocess.skan import trace_skeleton
 from skimage.segmentation import expand_labels
+from dnafiber.postprocess.utils import generate_svg
 
 
 @attrs.define
@@ -20,37 +21,53 @@ class Bbox:
     def bbox(self, value: Tuple[int, int, int, int]):
         self.x, self.y, self.width, self.height = value
 
+    @property
+    def area(self) -> int:
+        return self.width * self.height
 
-@attrs.define
-class Fiber:
-    bbox: Bbox
-    data: np.ndarray
+    @property
+    def center(self) -> Tuple[int, int]:
+        return (self.x + self.width // 2, self.y + self.height // 2)
+
+    def to_dict(self):
+        return {
+            "x": int(self.x),
+            "y": int(self.y),
+            "width": int(self.width),
+            "height": int(self.height),
+        }
+
+    def __getitem__(self, index):
+        return self.bbox[index]
 
 
 @attrs.define
 class FiberProps:
-    fiber: Fiber
-    fiber_id: int
+    bbox: Bbox
+    data: np.ndarray
+    fiber_id: int = -1
     red_pixels: int = None
     green_pixels: int = None
     category: str = None
     is_an_error: bool = False
+    svg_rep: str = None  # SVG representation of the fiber, for visualization purposes
+    trace: np.ndarray = None  # Coordinates of the skeletons of the fiber
 
     @property
     def bbox(self):
-        return self.fiber.bbox.bbox
+        return self.bbox.bbox
 
     @bbox.setter
     def bbox(self, value):
-        self.fiber.bbox = value
+        self.bbox = value
 
     @property
     def data(self):
-        return self.fiber.data
+        return self.data
 
     @data.setter
     def data(self, value):
-        self.fiber.data = value
+        self.data = value
 
     @property
     def red(self):
@@ -83,8 +100,15 @@ class FiberProps:
         if red_pixels == 0 or green_pixels == 0:
             self.category = "single"
         else:
-            self.category = estimate_fiber_category(self.data)
+            self.category = estimate_fiber_category(self.get_trace(), self.data)
         return self.category
+
+    def get_trace(self):
+        if self.trace is not None:
+            return self.trace
+        # Generate trace if not provided
+        self.trace = np.asarray(trace_skeleton(self.data > 0))
+        return self.trace
 
     @property
     def ratio(self):
@@ -100,11 +124,19 @@ class FiberProps:
             # Happens if there is no pixel remaining for this fiber, which indicates it is invalid.
             return False
 
-        return (
-            fiber_type == "double"
-            or fiber_type == "one-two-one"
-            or fiber_type == "two-one-two"
-        ) and not self.is_an_error
+        return self.is_double or self.is_triple
+
+    @property
+    def is_acceptable(self):
+        return not self.is_an_error
+
+    @property
+    def is_double(self):
+        return self.fiber_type == "double"
+
+    @property
+    def is_triple(self):
+        return self.fiber_type in ["one-two-one", "two-one-two"]
 
     def scaled_coordinates(self, scale: float) -> Tuple[int, int]:
         """
@@ -118,7 +150,7 @@ class FiberProps:
             int(height * scale),
         )
 
-    def bbox_intersect(self, other: Fiber, ratio=0.25) -> bool:
+    def bbox_intersect(self, other, ratio=0.25) -> bool:
         """
         Check if the bounding boxes of two fibers intersect by at least a certain ratio.
         """
@@ -134,6 +166,9 @@ class FiberProps:
             intersection_area / float(self_area + other_area - intersection_area)
             >= ratio
         )
+
+    def svg_representation(self, scale=1.0):
+        return generate_svg(self, scale=scale)
 
 
 @attrs.define
@@ -152,7 +187,7 @@ class Fibers:
     @property
     def ratios(self):
         return [fiber.ratio for fiber in self.fibers]
-    
+
     @property
     def lengths(self):
         return [fiber.length for fiber in self.fibers]
@@ -176,16 +211,16 @@ class Fibers:
         labelmap = expand_labels(labelmap, fiber_width)
         return labelmap
 
-    def contains(self, fiber: Fiber, ratio=0.5):
+    def contains(self, fiber: FiberProps, ratio=0.5):
         for existing_fiber in self.fibers:
             if existing_fiber.bbox_intersect(fiber, ratio):
                 return True
         return False
 
-    def append(self, fiber: Fiber):
+    def append(self, fiber: FiberProps):
         self.fibers.append(fiber)
 
-    def append_if_not_exists(self, fiber: Fiber, ratio=0.5):
+    def append_if_not_exists(self, fiber: FiberProps, ratio=0.5):
         """
         Append a fiber to the list if it does not already exist.
         """
@@ -194,6 +229,11 @@ class Fibers:
 
     def valid_copy(self):
         return Fibers([fiber for fiber in self.fibers if fiber.is_valid])
+
+    def filtered_copy(self):
+        return Fibers(
+            [fiber for fiber in self.fibers if (fiber.is_acceptable and fiber.is_valid)]
+        )
 
     def union(self, other, ratio=0.5):
         union = Fibers(self.fibers)
@@ -248,15 +288,18 @@ class Fibers:
             df["Image Name"] = img_name
         return df
 
+    def svgs(self, scale=1.0):
+        return [fiber.svg_representation(scale) for fiber in self.fibers]
 
-def estimate_fiber_category(fiber: np.ndarray) -> str:
+
+def estimate_fiber_category(fiber_trace: np.ndarray, fiber_data: np.ndarray) -> str:
     """
     Estimate the fiber category based on the number of red and green pixels.
     """
-    coordinates = trace_skeleton(fiber > 0)
+    coordinates = fiber_trace
     coordinates = np.asarray(coordinates)
     try:
-        values = fiber[coordinates[:, 0], coordinates[:, 1]]
+        values = fiber_data[coordinates[:, 0], coordinates[:, 1]]
     except IndexError:
         return "unknown"
     diff = np.diff(values)

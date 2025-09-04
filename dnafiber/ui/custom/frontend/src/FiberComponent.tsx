@@ -156,6 +156,10 @@ function FiberComponent(
               </Switch.Root>
               <span style={{ fontSize: "14px" }}>Hide errors</span>
             </div>
+            <span>
+              Found {elements.length} fibers (
+              {elements.filter((el: Fiber) => el.is_error).length} with errors)
+            </span>
           </div>
           <TransformWrapper
             ref={transformRef}

@@ -73,5 +73,5 @@ def generate_svg(fiber: FiberProps, scale=1.0) -> str:
     bbox_data["id"] = fiber.fiber_id
     bbox_data["type"] = fiber.fiber_type
     bbox_data["ratio"] = fiber.ratio if not np.isnan(fiber.ratio) else -1
-    bbox_data["is_error"] = bool(fiber.is_an_error[0])
+    bbox_data["is_error"] = bool(fiber.is_an_error)
     return json.dumps(bbox_data)

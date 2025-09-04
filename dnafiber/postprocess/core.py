@@ -268,7 +268,7 @@ def extract_fibers(
         fiber.bbox.x += x_offset
         fiber.bbox.y += y_offset
 
-    return fiberprops
+    return Fibers(fiberprops)
 
 
 def refine_segmentation(

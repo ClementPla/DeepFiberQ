@@ -1,26 +1,14 @@
-import math
-
 import cv2
 import numpy as np
 import streamlit as st
-import streamlit_image_coordinates
 import torch
-from bokeh.layouts import gridplot, column, row
-from bokeh.models import (
-    HoverTool,
-    Range1d,
-)
-from bokeh.plotting import figure
-from catppuccin import PALETTE
-from skimage.segmentation import expand_labels
-from skimage.util import view_as_blocks
-from streamlit_bokeh import streamlit_bokeh
+
 from PIL import Image
 import io
-from dnafiber.data.utils import CMAP, pad_image_to_croppable
+from dnafiber.data.utils import CMAP
 from dnafiber.deployment import MODELS_ZOO, MODELS_ZOO_R, ENSEMBLE
 from dnafiber.ui.components import show_fibers_cacheless, table_components
-from dnafiber.ui.inference import get_model, ui_inference, ui_inference_cacheless
+from dnafiber.ui.inference import get_model, ui_inference
 from dnafiber.ui.utils import (
     get_image,
     get_multifile_image,
@@ -37,7 +25,7 @@ st.markdown(
     """
         <style>
                .block-container {
-                    padding-top: 1rem;
+                    padding-top: 2rem;
                     padding-bottom: 0rem;
                     padding-left: 5rem;
                     padding-right: 5rem;

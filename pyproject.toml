@@ -51,6 +51,7 @@ dependencies = [
     "numba==0.60.0",
     "joblib==1.4.2",
     "ttach==0.0.3",
+    "mrc==0.3.1"
 ]
 
 
@@ -83,4 +84,5 @@ kornia = "0.7.3"
 numba = "0.60.0"
 joblib = "1.4.2"
 ttach = "0.0.3"
+mrc = "0.3.1"
 

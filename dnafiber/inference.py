@@ -8,6 +8,7 @@ import albumentations as A
 from monai.inferers import SlidingWindowInferer
 from dnafiber.ui.utils import _get_model
 from dnafiber.model.autopadDPT import AutoPad
+import kornia as K
 import torch.nn as nn
 import ttach as tta
 
@@ -53,11 +54,42 @@ def convert_mask_to_image(mask, expand=False):
     return image
 
 
+class BridgeGap(nn.Module):
+    def __init__(self, predictive_threshold=1 / 3):
+        super().__init__()
+        self.kernel = nn.Parameter(
+            torch.ones((5, 5), dtype=torch.float32), requires_grad=False
+        )
+        self.predictive_threshold = predictive_threshold
+
+    def forward(self, probabilities):
+        pos_prob = 1 - probabilities[:, :1, :, :]
+
+        # Morphological closing to bridge small gaps
+        pos_prob = K.morphology.closing(
+            (pos_prob > self.predictive_threshold).float(),
+            self.kernel,
+            engine="convolution",
+        )
+
+        probabilities[:, :1][pos_prob > 0] = 0
+        probabilities[:, :1][pos_prob == 0] = 1
+        return probabilities
+
+
 class Inferer(nn.Module):
-    def __init__(self, model, sliding_window_inferer=None, use_tta=False):
+    def __init__(
+        self,
+        model,
+        sliding_window_inferer=None,
+        use_tta=False,
+        prediction_threshold=1 / 3,
+    ):
         super().__init__()
 
-        self.model = AutoPad(nn.Sequential(model, nn.Softmax(dim=1)), 32)
+        self.model = AutoPad(
+            nn.Sequential(model, nn.Softmax(dim=1), BridgeGap(prediction_threshold)), 32
+        )
         self.model.eval()
 
         self.sliding_window_inferer = sliding_window_inferer
@@ -89,6 +121,7 @@ def infer(
     device,
     scale=0.13,
     use_tta=False,
+    prediction_threshold=1 / 3,
     verbose=False,
 ):
     if isinstance(model, str):
@@ -112,8 +145,12 @@ def infer(
         )
 
     inferer = Inferer(
-        model=model, sliding_window_inferer=sliding_window, use_tta=use_tta
+        model=model,
+        sliding_window_inferer=sliding_window,
+        use_tta=use_tta,
+        prediction_threshold=prediction_threshold,
     )
+    inferer.to(device)
     with torch.autocast(device_type=device.type):
         tensor = F.interpolate(
             tensor,

@@ -44,7 +44,6 @@ def run_one_file(
         image = get_image_cacheless(file, reverse_channels, bit_depth=bit_depth)
     start = time.time()
     prediction = ui_inference_cacheless(
-        
         _model=model,
         _image=image,
         pixel_size=pixel_size,
@@ -244,6 +243,8 @@ class Models(str, Enum):
     SEGFORMER_MIT_B1 = "segformer_mit_b1"
     SEGFORMER_MIT_B2 = "segformer_mit_b2"
     SEGFORMER_MIT_B4 = "segformer_mit_b4"
+
+    ENSEMBLE = "ensemble"
 
 
 MODELS_ZOO = {

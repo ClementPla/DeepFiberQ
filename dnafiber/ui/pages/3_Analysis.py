@@ -1,17 +1,20 @@
 import streamlit as st
 import torch
-from dnafiber.ui.utils import get_multifile_image, get_image_cacheless
-from dnafiber.deployment import MODELS_ZOO, MODELS_ZOO_R, ENSEMBLE
+from dnafiber.ui.consts import DefaultValues
+from dnafiber.ui.utils import build_file_id, get_multifile_image, get_image_cacheless
+from dnafiber.deployment import MODELS_ZOO, MODELS_ZOO_R, ENSEMBLE, Models
 import pandas as pd
 import plotly.express as px
-from dnafiber.postprocess import refine_segmentation
 
-import torch.nn.functional as F
-from joblib import Parallel, delayed
-import time
 from catppuccin import PALETTE
-from dnafiber.ui.inference import ui_inference_cacheless, get_model
+from dnafiber.ui.inference import ui_inference, get_model
 from dnafiber.ui.components import show_fibers_cacheless, table_components
+from dnafiber.ui.utils import build_inference_id
+from dnafiber.ui import DefaultValues as DV
+
+from dnafiber.ui.utils import retain_session_state
+
+retain_session_state(st.session_state)
 
 
 def image_name_to_category(image_name):
@@ -132,35 +135,47 @@ def plot_result(seleted_category):
     )
 
 
-def run_one_file(file, model, use_tta, use_correction=True):
+def run_one_file(
+    file,
+    model,
+    use_tta=DV.USE_TTA,
+    use_correction=DV.USE_CORRECTION,
+    prediction_threshold=DV.PREDICTION_THRESHOLD,
+    inference_id="",
+):
     if isinstance(file, tuple):
         if file[0] is None:
             filename = file[1].name
         if file[1] is None:
             filename = file[0].name
-        image = get_multifile_image(file)
-    else:
-        filename = file.name
-        image = get_image_cacheless(
-            file, st.session_state.get("reverse_channels", False)
+        image = get_multifile_image(
+            file, bit_depth=st.session_state.get("bit_depth", DV.BIT_DEPTH)
         )
-    results = ui_inference_cacheless(
-        _model=model,
-        _image=image,
-        _device="cuda" if torch.cuda.is_available() else "cpu",
-        prediction_threshold=1 / 3,
-        pixel_size=st.session_state.get("pixel_size", 0.13),
-        use_tta=use_tta,
-        use_correction=use_correction,
+    else:
+        image = get_image_cacheless(
+            file,
+            st.session_state.get("reverse_channels", DV.REVERSE_CHANNELS),
+            st.session_state.get("bit_depth", DV.BIT_DEPTH),
+        )
+        filename = file.name
+    results = ui_inference(
+        model,
+        image,
+        "cuda" if torch.cuda.is_available() else "cpu",
+        use_tta,
+        use_correction,
+        prediction_threshold,
+        key=inference_id,
     )
     results = results.filtered_copy()
-    df = show_fibers_cacheless(results, image, image_id=None, resolution=256)
+    st.write(f"Detected {len(results)} fibers in {filename}")
+    df = show_fibers_cacheless(results, image, resolution=256)
     df["image_name"] = filename
     return df
 
 
-def run_inference(model_name, use_tta, use_correction):
-    if "ensemble" in model_name:
+def run_inference(model_name, use_tta=DV.USE_TTA, use_correction=DV.USE_CORRECTION):
+    if model_name == Models.ENSEMBLE:
         model = []
         for _ in range(len(ENSEMBLE)):
             with st.spinner(f"Loading model {_ + 1}/{len(ENSEMBLE)}..."):
@@ -180,8 +195,34 @@ def run_inference(model_name, use_tta, use_correction):
                 filename = file[0].name
         else:
             filename = file.name
+        file_id = build_file_id(
+            file,
+            pixel_size=st.session_state.get("pixel_size", DV.PIXEL_SIZE),
+            reverse_channels=st.session_state.get(
+                "reverse_channels", DV.REVERSE_CHANNELS
+            ),
+            bit_depth=st.session_state.get("bit_depth", DV.BIT_DEPTH),
+        )
+        prediction_threshold = st.session_state.get(
+            "prediction_threshold", DV.PREDICTION_THRESHOLD
+        )
+
+        inference_id = build_inference_id(
+            file_id,
+            model_name,
+            use_tta,
+            use_correction,
+            prediction_threshold,
+        )
         try:
-            df = run_one_file(file, model, use_tta, use_correction)
+            df = run_one_file(
+                file,
+                model,
+                use_tta,
+                use_correction,
+                inference_id=inference_id,
+                prediction_threshold=prediction_threshold,
+            )
         except Exception as e:
             st.error(f"Error processing {filename}: {e}")
             continue
@@ -204,13 +245,13 @@ if st.session_state.get("files_uploaded", None):
     with st.sidebar:
         st.metric(
             "Pixel size (µm)",
-            st.session_state.get("pixel_size", 0.13),
+            st.session_state.get("pixel_size", DV.PIXEL_SIZE),
         )
 
         with st.expander("Model", expanded=True):
-            use_ensemble = st.checkbox(
+            st.checkbox(
                 "Ensemble model",
-                value=False,
+                key="use_ensemble",
                 help="Use all available models to improve segmentation results.",
             )
             model_name = st.selectbox(
@@ -219,23 +260,23 @@ if st.session_state.get("files_uploaded", None):
                 format_func=lambda x: MODELS_ZOO_R[x],
                 index=0,
                 help="Select a model to use for inference",
-                disabled=use_ensemble,
+                disabled=st.session_state.get("use_ensemble", False),
             )
-            if use_ensemble:
+            if st.session_state.get("use_ensemble", False):
                 st.warning(
                     "Ensemble model is selected. All available models will be used for inference."
                 )
-                model_name = "ensemble"
+                model_name = Models.ENSEMBLE
 
-            use_tta = st.checkbox(
+            st.checkbox(
                 "Use test time augmentation (TTA)",
-                value=False,
+                key="use_tta",
                 help="Use test time augmentation to improve segmentation results.",
             )
 
-            detect_errors = st.checkbox(
+            st.checkbox(
                 "Use error detection and filtering",
-                value=True,
+                key="use_correction",
                 help="Use the error filtering model to improve detection results.",
             )
 
@@ -244,11 +285,10 @@ if st.session_state.get("files_uploaded", None):
     with tab_segmentation:
         st.subheader("Segmentation")
         if run_segmentation:
-            st.session_state.image_id = None
             run_inference(
                 model_name=model_name,
-                use_tta=use_tta,
-                use_correction=detect_errors,
+                use_tta=st.session_state.get("use_tta", False),
+                use_correction=st.session_state.get("use_correction", False),
             )
             st.balloons()
         if st.session_state.get("results", None) is not None:

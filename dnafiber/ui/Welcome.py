@@ -1,5 +1,8 @@
 import streamlit as st
 import torch
+from dnafiber.ui.utils import retain_session_state
+
+retain_session_state(st.session_state)
 
 
 def main():

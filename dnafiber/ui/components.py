@@ -9,9 +9,15 @@ from dnafiber.data.utils import numpy_to_base64_jpeg
 
 @st.cache_data
 def show_fibers(_prediction, _image, image_id=None, resolution=400, show_errors=True):
-    return show_fibers_cacheless(_prediction, _image, image_id=image_id, resolution=resolution, show_errors=show_errors)
+    return show_fibers_cacheless(
+        _prediction,
+        _image,
+        resolution=resolution,
+        show_errors=show_errors,
+    )
 
-def show_fibers_cacheless(_prediction, _image, image_id=None, resolution=400, show_errors=True):
+
+def show_fibers_cacheless(_prediction, _image, resolution=400, show_errors=True):
     data = dict(
         fiber_id=[],
         firstAnalog=[],
@@ -36,14 +42,16 @@ def show_fibers_cacheless(_prediction, _image, image_id=None, resolution=400, sh
         data["is_valid"].append(fiber.is_valid)
 
         x, y, w, h = fiber.bbox
-      
+
         # Offset by half the height and width the x, y coordinates to have a larger visualization
-        xextract1 = max(0, x-math.floor(w / 2))
-        yextract1 = max(0, y-math.floor(h / 2))
+        xextract1 = max(0, x - math.floor(w / 2))
+        yextract1 = max(0, y - math.floor(h / 2))
         xextract2 = min(_image.shape[1], x + w + math.floor(w / 2))
         yextract2 = min(_image.shape[0], y + h + math.floor(h / 2))
-
-        visu = _image[max(0, yextract1) : min(_image.shape[0], yextract2), max(0, xextract1) : min(_image.shape[1], xextract2)]
+        visu = _image[
+            max(0, yextract1) : min(_image.shape[0], yextract2),
+            max(0, xextract1) : min(_image.shape[1], xextract2),
+        ]
 
         rect_coordinates = (x - xextract1, y - yextract1, w, h)
 
@@ -70,10 +78,19 @@ def show_fibers_cacheless(_prediction, _image, image_id=None, resolution=400, sh
                 math.floor(rect_coordinates[3] * scale),
             )
 
-        cv2.rectangle(visu, (rect_coordinates[0], rect_coordinates[1]), (rect_coordinates[0] + rect_coordinates[2], rect_coordinates[1] + rect_coordinates[3]), (0, 0, 255), 3)
+        cv2.rectangle(
+            visu,
+            (rect_coordinates[0], rect_coordinates[1]),
+            (
+                rect_coordinates[0] + rect_coordinates[2],
+                rect_coordinates[1] + rect_coordinates[3],
+            ),
+            (0, 0, 255),
+            3,
+        )
 
         # Draw a rectangle around the fiber, without the offset
-        
+
         # Pad the visualization to have a square image
         if visu.shape[0] < visu.shape[1]:
             pad = (visu.shape[1] - visu.shape[0]) // 2
@@ -86,7 +103,7 @@ def show_fibers_cacheless(_prediction, _image, image_id=None, resolution=400, sh
                 visu, 0, 0, pad, pad, cv2.BORDER_CONSTANT, value=(0, 0, 0)
             )
 
-        # Make sure the 
+        # Make sure the
         data["visualization"].append(visu)
 
     df = pd.DataFrame(data)
@@ -106,17 +123,17 @@ def show_fibers_cacheless(_prediction, _image, image_id=None, resolution=400, sh
 
 def table_components(df):
     event = st.dataframe(
-            df,
-            on_select="rerun",
-            selection_mode="multi-row",
-            use_container_width=True,
-            column_config={
-                "Visualization": st.column_config.ImageColumn(
-                    "Visualization",
-                    help="Visualization of the fiber",
-                )
-            },
-        )
+        df,
+        on_select="rerun",
+        selection_mode="multi-row",
+        use_container_width=True,
+        column_config={
+            "Visualization": st.column_config.ImageColumn(
+                "Visualization",
+                help="Visualization of the fiber",
+            )
+        },
+    )
 
     rows = event["selection"]["rows"]
     columns = df.columns[:-2]
@@ -131,9 +148,8 @@ def table_components(df):
         if copy_to_clipboard:
             df.to_clipboard(index=False)
     with cols[2]:
-
         if st.session_state.get("image_id", None) is not None:
-             st.download_button(
+            st.download_button(
                 "Download selected fibers",
                 data=df.to_csv(index=False).encode("utf-8"),
                 file_name=f"fibers_{st.session_state.image_id}.csv",

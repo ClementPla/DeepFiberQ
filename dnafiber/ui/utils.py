@@ -1,10 +1,11 @@
+from pyexpat import model
 import PIL.Image
 import streamlit as st
 from dnafiber.data.utils import read_czi, read_tiff, read_dv, preprocess
 import cv2
 import numpy as np
 import PIL
-
+from dnafiber.ui.consts import DefaultValues as DV
 from dnafiber.trainee import Trainee
 
 MAX_WIDTH = 1024
@@ -86,13 +87,17 @@ def get_multifile_image(_filepaths, bit_depth=14):
     result = None
 
     if _filepaths[0] is not None:
-        chan1 = get_image(_filepaths[0], False, _filepaths[0].file_id, bit_depth=bit_depth)
+        chan1 = get_image(
+            _filepaths[0], False, _filepaths[0].file_id, bit_depth=bit_depth
+        )
         chan1 = cv2.cvtColor(chan1, cv2.COLOR_RGB2GRAY)
         h, w = chan1.shape[:2]
     else:
         chan1 = None
     if _filepaths[1] is not None:
-        chan2 = get_image(_filepaths[1], False, _filepaths[1].file_id, bit_depth=bit_depth)
+        chan2 = get_image(
+            _filepaths[1], False, _filepaths[1].file_id, bit_depth=bit_depth
+        )
         chan2 = cv2.cvtColor(chan2, cv2.COLOR_RGB2GRAY)
         h, w = chan2.shape[:2]
     else:
@@ -147,3 +152,72 @@ def bokeh_imshow(fig, image):
     view[:, :, 2] = image[:, :, 2]
     view[:, :, 3] = 255  # Alpha channel
     fig.image_rgba(image=[img], x=0, y=0, dw=image.shape[1], dh=image.shape[0])
+
+
+def build_inference_id(
+    file_id, model_name, use_tta, use_correction, prediction_threshold
+) -> str:
+    assert isinstance(file_id, str), "file_id must be a string"
+    assert isinstance(model_name, (str, int)), (
+        "model_name must be a string or an integer"
+    )
+    assert isinstance(use_tta, bool), "use_tta must be a boolean"
+    assert isinstance(use_correction, bool), "use_correction must be a boolean"
+    assert isinstance(prediction_threshold, float), (
+        "prediction_threshold must be a float"
+    )
+
+    inference_id = (
+        (file_id + f"_{str(model_name)}")
+        + ("_use_tta" if use_tta else "_no_tta")
+        + ("_detect_errors" if use_correction else "_no_detect_errors")
+        + f"_{prediction_threshold:.2f}"
+    )
+    return inference_id
+
+
+def build_file_id(file, pixel_size, reverse_channels, bit_depth):
+    if isinstance(file, tuple):
+        file_id = str(hash(file[0] if file[0] is not None else file[1]))
+    else:
+        file_id = str(hash(file))
+
+    file_id = (
+        file_id
+        + f"_{pixel_size}um"
+        + f"_{'rev' if reverse_channels else 'no_rev'}"
+        + f"_{bit_depth}bit"
+    )
+    return file_id
+
+
+def init_session_states():
+    if "pixel_size" not in st.session_state:
+        st.session_state["pixel_size"] = DV.PIXEL_SIZE
+    if "bit_depth" not in st.session_state:
+        st.session_state["bit_depth"] = DV.BIT_DEPTH
+    if "reverse_channels" not in st.session_state:
+        st.session_state["reverse_channels"] = DV.REVERSE_CHANNELS
+    if "prediction_threshold" not in st.session_state:
+        st.session_state["prediction_threshold"] = DV.PREDICTION_THRESHOLD
+    if "use_tta" not in st.session_state:
+        st.session_state["use_tta"] = DV.USE_TTA
+    if "use_correction" not in st.session_state:
+        st.session_state["use_correction"] = DV.USE_CORRECTION
+    if "use_ensemble" not in st.session_state:
+        st.session_state["use_ensemble"] = DV.USE_ENSEMBLE
+    if st.session_state.get("files_uploaded", None) is None:
+        st.session_state["files_uploaded"] = []
+
+    if st.session_state.get("analog_2_files", None) is None:
+        st.session_state["analog_2_files"] = []
+
+    if st.session_state.get("analog_1_files", None) is None:
+        st.session_state["analog_1_files"] = []
+
+
+def retain_session_state(ss):
+    state_vars = ss.keys()
+    for var in state_vars:
+        if var in ss and not var.startswith("FormSubmitter"):
+            ss[var] = ss[var]

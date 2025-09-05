@@ -178,9 +178,18 @@ class FiberProps:
         return svg_representation
 
 
+def filter_invalid_bbox(fibers: list[FiberProps]) -> list[FiberProps]:
+    valid_fibers = []
+    for fiber in fibers:
+        x, y, w, h = fiber.bbox
+        if w > 0 and h > 0 and fiber.data.size > 0 and x >= 0 and y >= 0:
+            valid_fibers.append(fiber)
+    return valid_fibers
+
+
 @attrs.define
 class Fibers:
-    fibers: list[FiberProps]
+    fibers: list[FiberProps] = attrs.field(factory=list, converter=filter_invalid_bbox)
 
     def __iter__(self):
         return iter(self.fibers)

@@ -6,16 +6,21 @@ import torch
 from PIL import Image
 import io
 from dnafiber.data.utils import CMAP
-from dnafiber.deployment import MODELS_ZOO, MODELS_ZOO_R, ENSEMBLE
+from dnafiber.deployment import MODELS_ZOO, MODELS_ZOO_R, ENSEMBLE, Models
 from dnafiber.ui.components import show_fibers_cacheless, table_components
 from dnafiber.ui.inference import get_model, ui_inference
 from dnafiber.ui.utils import (
+    build_file_id,
+    build_inference_id,
     get_image,
     get_multifile_image,
     get_resized_image,
 )
-from dnafiber.ui.custom import fiber_ui
+from dnafiber.ui.custom.fiber_ui import fiber_ui
+from dnafiber.ui import DefaultValues as DV
+from dnafiber.ui.utils import retain_session_state
 
+retain_session_state(st.session_state)
 st.set_page_config(
     layout="wide",
     page_icon=":microscope:",
@@ -46,51 +51,66 @@ def on_session_start():
         return can_start
 
     cldu_exists = (
-        st.session_state.get("files_uploaded_cldu", None) is not None
-        and len(st.session_state.files_uploaded_cldu) > 0
+        st.session_state.get("analog_2_files", None) is not None
+        and len(st.session_state.analog_2_files) > 0
     )
     idu_exists = (
-        st.session_state.get("files_uploaded_idu", None) is not None
-        and len(st.session_state.files_uploaded_idu) > 0
+        st.session_state.get("analog_1_files", None) is not None
+        and len(st.session_state.analog_1_files) > 0
     )
 
     if cldu_exists and idu_exists:
-        if len(st.session_state.get("files_uploaded_cldu")) != len(
-            st.session_state.get("files_uploaded_idu")
+        if len(st.session_state.get("analog_2_files")) != len(
+            st.session_state.get("analog_1_files")
         ):
             st.error("Please upload the same number of CldU and IdU files.")
             return False
 
 
-def start_inference(use_tta=True, use_correction=True, prediction_threshold=1 / 3):
-    image = st.session_state.image_inference
+def clear_cache():
+    st.cache_data.clear()
+    st.cache_resource.clear()
+    st.success("Cache cleared!")
+
+
+st.button("Clear cache", on_click=clear_cache)
+
+
+def start_inference(
+    image,
+    model_name,
+    use_tta=DV.USE_TTA,
+    use_correction=DV.USE_CORRECTION,
+    prediction_threshold=DV.PREDICTION_THRESHOLD,
+    inference_id=None,
+):
     org_h, org_w = image.shape[:2]
     image = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
 
-    if "ensemble" in st.session_state.model_name:
+    if model_name == Models.ENSEMBLE:
         model = []
         for _ in range(len(ENSEMBLE)):
             with st.spinner(f"Loading model {_ + 1}/{len(ENSEMBLE)}..."):
                 model.append(get_model(ENSEMBLE[_]))
     else:
         with st.spinner("Loading model..."):
-            model = get_model(st.session_state.model_name)
+            model = get_model(model_name)
+
     prediction = ui_inference(
         model,
         image,
         "cuda" if torch.cuda.is_available() else "cpu",
-        use_tta=use_tta,
-        use_correction=use_correction,
-        prediction_threshold=prediction_threshold,
-        id=st.session_state.image_id,
+        use_tta,
+        use_correction,
+        prediction_threshold,
+        key=inference_id,
     )
-
     tab_viewer, tab_fibers = st.tabs(["Viewer", "Fibers"])
+
     with tab_fibers:
         df = show_fibers_cacheless(
             _prediction=prediction,
             _image=image,
-            image_id=st.session_state.image_id,
         )
         table_components(df)
 
@@ -101,7 +121,7 @@ def start_inference(use_tta=True, use_correction=True, prediction_threshold=1 / 
                     image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
                 )
 
-        max_size = 20000
+        max_size = 10000
         h, w = image.shape[:2]
         size = max(h, w)
         scale = 1.0
@@ -175,8 +195,14 @@ if on_session_start():
     # Find index of the selected file
     index = displayed_names.index(selected_file)
     file = files[index]
+
+    file_id = build_file_id(
+        file,
+        pixel_size=st.session_state.get("pixel_size", DV.PIXEL_SIZE),
+        reverse_channels=st.session_state.get("reverse_channels", DV.REVERSE_CHANNELS),
+        bit_depth=st.session_state.get("bit_depth", DV.BIT_DEPTH),
+    )
     if isinstance(file, tuple):
-        file_id = str(hash(file[0]))
         if file[0] is None or file[1] is None:
             missing = "First analog" if file[0] is None else "Second analog"
             st.warning(
@@ -185,33 +211,32 @@ if on_session_start():
             )
         image = get_multifile_image(file)
     else:
-        file_id = str(hash(file))
         image = get_image(
             file,
-            reverse_channel=st.session_state.get("reverse_channels", False),
+            reverse_channel=st.session_state.get(
+                "reverse_channels", DV.REVERSE_CHANNELS
+            ),
+            bit_depth=st.session_state.get("bit_depth", DV.BIT_DEPTH),
             id=file_id,
-            bit_depth=st.session_state.get("bit_depth", 14),
         )
 
-    org_image = image.copy()
-    h, w = image.shape[:2]
     with st.sidebar:
         st.metric(
             "Pixel size (µm)",
-            st.session_state.get("pixel_size", 0.13),
+            st.session_state.get("pixel_size", DV.PIXEL_SIZE),
         )
         st.metric(
             "Bit depth",
-            st.session_state.get("bit_depth", 14),
+            st.session_state.get("bit_depth", DV.BIT_DEPTH),
         )
 
     thumbnail = get_resized_image(image, file_id)
 
     with st.sidebar:
         with st.expander("Model", expanded=True):
-            use_ensemble = st.checkbox(
+            st.checkbox(
                 "Ensemble model",
-                value=False,
+                key="use_ensemble",
                 help="Use all available models to improve segmentation results.",
             )
             model_name = st.selectbox(
@@ -220,31 +245,31 @@ if on_session_start():
                 format_func=lambda x: MODELS_ZOO_R[x],
                 index=0,
                 help="Select a model to use for inference",
-                disabled=use_ensemble,
+                disabled=st.session_state.get("use_ensemble", DV.USE_ENSEMBLE),
             )
-            if use_ensemble:
+            if st.session_state.get("use_ensemble", DV.USE_ENSEMBLE):
                 st.warning(
                     "Ensemble model is selected. All available models will be used for inference."
                 )
-                model_name = "ensemble"
+                model_name = Models.ENSEMBLE
 
-            use_tta = st.checkbox(
+            st.checkbox(
                 "Use test time augmentation (TTA)",
-                value=False,
+                key="use_tta",
                 help="Use test time augmentation to improve segmentation results.",
             )
 
-            detect_errors = st.checkbox(
+            st.checkbox(
                 "Use error detection and filtering",
-                value=True,
+                key="use_correction",
                 help="Use the error filtering model to improve detection results.",
             )
 
-            prediction_threshold = st.slider(
+            st.slider(
                 "Prediction threshold",
                 min_value=0.0,
                 max_value=1.0,
-                value=1 / 3,
+                key="prediction_threshold",
                 step=0.01,
                 help="Select the prediction threshold for the model. Lower values may increase the number of detected fibers.",
             )
@@ -262,25 +287,24 @@ if on_session_start():
     with st.sidebar:
         st.image(image, caption="Current image", use_container_width=True)
 
-    st.session_state.model_name = model_name
-    st.session_state.image_inference = image
-    st.session_state.image_id = (
-        (file_id + str(model_name))
-        + ("_use_tta" if use_tta else "_no_tta")
-        + ("_detect_errors" if detect_errors else "_no_detect_errors")
-        + f"_{prediction_threshold:.2f}"
-        + f"_{h}x{w}"
-        + f"_{st.session_state.get('pixel_size', 0.13)}um"
-        + f"_{'ensemble' if use_ensemble else model_name}"
-        + f"_{'rev' if st.session_state.get('reverse_channels', False) else 'no_rev'}"
-        + f"_{st.session_state.get('bit_depth', 14)}bit"
+    inference_id = build_inference_id(
+        file_id,
+        str(model_name),
+        st.session_state.get("use_tta", DV.USE_TTA),
+        st.session_state.get("use_correction", DV.USE_CORRECTION),
+        st.session_state.get("prediction_threshold", DV.PREDICTION_THRESHOLD),
     )
     col1, col2, col3 = st.columns([1, 1, 1])
 
     start_inference(
-        use_tta=use_tta,
-        use_correction=detect_errors,
-        prediction_threshold=prediction_threshold,
+        image=image,
+        model_name=model_name,
+        use_tta=st.session_state.get("use_tta", DV.USE_TTA),
+        use_correction=st.session_state.get("use_correction", DV.USE_CORRECTION),
+        prediction_threshold=st.session_state.get(
+            "prediction_threshold", DV.PREDICTION_THRESHOLD
+        ),
+        inference_id=inference_id,
     )
 
 

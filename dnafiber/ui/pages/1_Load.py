@@ -1,10 +1,11 @@
 import streamlit as st
 from pathlib import Path
-from PIL import Image
+from dnafiber.ui import DefaultValues as DV
+from dnafiber.ui.utils import init_session_states, retain_session_state
 
+retain_session_state(st.session_state)
+init_session_states()
 
-# Or, disable the limit entirely (use with caution)
-Image.MAX_IMAGE_PIXELS = None 
 st.set_page_config(
     page_title="DN-AI",
     page_icon="🔬",
@@ -21,21 +22,21 @@ def build_loader(key, input_description, accepted_formats):
     input_folder = Path(input_folder)
     if input_folder.is_dir():
         input_files = []
-        if '.czi' in accepted_formats:
+        if ".czi" in accepted_formats:
             input_files += list(input_folder.rglob("*.[cC][zZ][iI]"))  # Match CZI files
-        if '.tif' in accepted_formats or '.tiff' in accepted_formats:
+        if ".tif" in accepted_formats or ".tiff" in accepted_formats:
             input_files += list(input_folder.rglob("*.[tT][iI][fF]"))
             input_files += list(
-            input_folder.rglob("*.[tT][iI][fF][fF]")
-        )  # Match TIFF files
-        if '.jpg' in accepted_formats or '.jpeg' in accepted_formats:
+                input_folder.rglob("*.[tT][iI][fF][fF]")
+            )  # Match TIFF files
+        if ".jpg" in accepted_formats or ".jpeg" in accepted_formats:
             input_files += list(
                 input_folder.rglob("*.[jJ][pP][eE][gG]")
             )  # Match JPEG files
             input_files += list(input_folder.rglob("*.[jJ][pP][gG]"))  # Match JPG files
-        if '.png' in accepted_formats:
+        if ".png" in accepted_formats:
             input_files += list(input_folder.rglob("*.[pP][nN][gG]"))  # Match PNG files
-        if '.dv' in accepted_formats:
+        if ".dv" in accepted_formats:
             input_files += list(input_folder.rglob("*.[dD][vV]"))  # Match DV files
 
         # Cast the path to string
@@ -54,8 +55,6 @@ def build_loader(key, input_description, accepted_formats):
 
 
 def build_multichannel_loader(accepted_formats):
-    if st.session_state.get("files_uploaded", None) is None:
-        st.session_state["files_uploaded"] = []
     build_loader(
         "files_uploaded",
         "Enter the path to the folder containing multichannel files. You can also enter an individual file path.",
@@ -73,9 +72,9 @@ def build_multichannel_loader(accepted_formats):
             unsafe_allow_html=True,
         )
         st.write("If this not the intended behavior, please tick the box below:")
-        st.session_state["reverse_channels"] = st.checkbox(
+        st.checkbox(
             "Reverse the channels interpretation",
-            value=False,
+            key="reverse_channels",
         )
         st.warning(
             "Please note that we only swap the channels for raw (CZI, TIFF) files. JPEG and PNG files "
@@ -97,8 +96,7 @@ def build_individual_loader(accepted_formats):
             f"<h3 style='color: {st.session_state['color2']};'>Second analog</h3>",
             unsafe_allow_html=True,
         )
-        if st.session_state.get("analog_2_files", None) is None:
-            st.session_state["analog_2_files"] = []
+
         build_loader(
             "analog_2_files",
             "Enter the path to the folder containing second analog files",
@@ -111,8 +109,6 @@ def build_individual_loader(accepted_formats):
             unsafe_allow_html=True,
         )
 
-        if st.session_state.get("analog_1_files", None) is None:
-            st.session_state["analog_1_files"] = []
         build_loader(
             "analog_1_files",
             "Enter the path to the folder containing first analog files",
@@ -195,14 +191,18 @@ def build_individual_loader(accepted_formats):
 cols = st.columns(2)
 with cols[1]:
     st.write("### Bit depth")
-    st.session_state["bit_depth"] = st.number_input(
-        "Please indicate the bit depth of the image (default: 14 bits).",
-        value=st.session_state.get("bit_depth", 14),
+    if "bit_depth" not in st.session_state:
+        st.session_state["bit_depth"] = DV.BIT_DEPTH
+    st.number_input(
+        f"Please indicate the bit depth of the image (default: {DV.BIT_DEPTH} bits).",
+        key="bit_depth",
+        step=1,
     )
     st.write("### Pixel size")
-    st.session_state["pixel_size"] = st.number_input(
-        "Please indicate the pixel size of the image in µm (default: 0.13 µm).",
-        value=st.session_state.get("pixel_size", 0.13),
+
+    st.number_input(
+        f"Please indicate the pixel size of the image in µm (default: {DV.PIXEL_SIZE} µm).",
+        key="pixel_size",
     )
     with st.expander("About pixel size", expanded=False):
         st.write(

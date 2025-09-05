@@ -4,7 +4,7 @@ inspect/
 wandb/
 data/
 output/
-dnafiber/ui/custom/frontend/node_modules/
+dnafiber/ui/custom/fiber_ui/frontend/node_modules
 /node_modules/
 
 *.zip

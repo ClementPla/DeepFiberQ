@@ -5,32 +5,29 @@ import numpy as np
 from dnafiber.ui.utils import _get_model
 import torch
 from dnafiber.postprocess.error_detection import load_model
-from skimage.morphology import binary_closing, remove_small_objects
 from dnafiber.postprocess.fiber import Fibers
-import kornia as K
+import time
 
 
-@st.cache_resource
+@st.cache_data(show_spinner="Running predictions...")
 def ui_inference(
     _model,
     _image,
     _device,
-    use_tta=True,
-    use_correction=True,
-    prediction_threshold=1 / 3,
-    id=None,
+    _use_tta=True,
+    _use_correction=True,
+    _prediction_threshold=1 / 3,
+    key="default",
 ) -> np.ndarray | Fibers:
-    with st.spinner("Running inference..."):
-        pred = ui_inference_cacheless(
-            _model,
-            _image,
-            _device,
-            pixel_size=st.session_state.get("pixel_size", 0.13),
-            use_tta=use_tta,
-            prediction_threshold=prediction_threshold,
-            use_correction=use_correction,
-        )
-    return pred
+    return ui_inference_cacheless(
+        _model,
+        _image,
+        _device,
+        pixel_size=st.session_state.get("pixel_size", 0.13),
+        use_tta=_use_tta,
+        prediction_threshold=_prediction_threshold,
+        use_correction=_use_correction,
+    )
 
 
 @st.cache_resource
@@ -78,6 +75,7 @@ def ui_inference_cacheless(
                             use_tta=use_tta,
                             scale=pixel_size,
                             verbose=verbose,
+                            prediction_threshold=prediction_threshold,
                         ).cpu()
                     else:
                         output += (
@@ -88,6 +86,7 @@ def ui_inference_cacheless(
                                 use_tta=use_tta,
                                 scale=pixel_size,
                                 verbose=verbose,
+                                prediction_threshold=prediction_threshold,
                             )
                         ).cpu()
                 output = output / len(_model)
@@ -101,20 +100,16 @@ def ui_inference_cacheless(
                 scale=pixel_size,
                 use_tta=use_tta,
                 verbose=verbose,
+                prediction_threshold=prediction_threshold,
             ).cpu()
 
     with st.spinner("Processing model output..."):
+        start = time.time()
         output = output.cpu().numpy()
-
-        pos_prob = 1 - output[0, 0, :, :]
-
-        pos_prob = binary_closing(pos_prob >= prediction_threshold, np.ones((3, 3)))
-
-        output[0, 0, pos_prob > 0] = 0
-        output[0, 0, pos_prob == 0] = 1
-
         output = np.argmax(output, axis=1).squeeze()
         output = output.astype(np.uint8)
+        if verbose:
+            print("Post-processing time:", time.time() - start)
     if verbose:
         print("Segmentation done...")
     if only_segmentation:

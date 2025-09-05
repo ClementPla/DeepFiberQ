@@ -10,7 +10,7 @@ DNAI = "dnafiber.start:main"
 
 [project]
 name = "dnafiber"
-version = ["version"]
+dynamic = ["version"]
 description = ""
 authors = [{name="ClementPla", email="clement.playout@polymtl.ca"}]
 readme = "README.md"

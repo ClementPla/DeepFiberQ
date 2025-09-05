@@ -194,13 +194,11 @@ def distribution_analysis(predictions: Fibers):
             value=50,
             step=1,
         )
-
-    mean_points = (
-        df[["First analog (µm)", "Second analog (µm)", "Length"]].median().values
-    )
+    cap_values = ["Ratio"]
+    mean_points = df[cap_values].mean().values
 
     df["Distance"] = np.linalg.norm(
-        df[["First analog (µm)", "Second analog (µm)", "Length"]].values - mean_points,
+        df[cap_values].values - mean_points,
         axis=1,
     )
 
@@ -227,35 +225,35 @@ def distribution_analysis(predictions: Fibers):
             )
         )
         # Draw a radius around the barycenter that contains N points
-        if cap:
-            radius = df.nsmallest(N, "Distance").Distance.max()
+        # if cap:
+        #     radius = df.nsmallest(N, "Distance").Distance.max()
 
-            # Create a sphere
-            u = np.linspace(0, 2 * np.pi, 25)
-            v = np.linspace(0, np.pi, 25)
-            x = mean_points[0] + radius * np.outer(np.cos(u), np.sin(v))
-            y = mean_points[1] + radius * np.outer(np.sin(u), np.sin(v))
-            z = mean_points[2] + radius * np.outer(np.ones(np.size(u)), np.cos(v))
-            fig.add_trace(
-                go.Surface(
-                    x=x,
-                    y=y,
-                    z=z,
-                    opacity=0.2,
-                    showscale=False,
-                )
-            )
+        #     # Create a sphere
+        #     u = np.linspace(0, 2 * np.pi, 25)
+        #     v = np.linspace(0, np.pi, 25)
+        #     x = mean_points[0] + radius * np.outer(np.cos(u), np.sin(v))
+        #     y = mean_points[1] + radius * np.outer(np.sin(u), np.sin(v))
+        #     z = mean_points[2] + radius * np.outer(np.ones(np.size(u)), np.cos(v))
+        #     fig.add_trace(
+        #         go.Surface(
+        #             x=x,
+        #             y=y,
+        #             z=z,
+        #             opacity=0.2,
+        #             showscale=False,
+        #         )
+        #     )
 
-        fig.add_trace(
-            go.Scatter3d(
-                x=[mean_points[0]],
-                y=[mean_points[1]],
-                z=[mean_points[2]],
-                mode="markers",
-                marker=dict(size=5, color="green"),
-                name="Barycenter",
-            )
-        )
+        # fig.add_trace(
+        #     go.Scatter3d(
+        #         x=[mean_points[0]],
+        #         y=[mean_points[1]],
+        #         z=[mean_points[2]],
+        #         mode="markers",
+        #         marker=dict(size=5, color="green"),
+        #         name="Barycenter",
+        #     )
+        # )
         # Set axis labels
         fig.update_layout(
             scene=dict(

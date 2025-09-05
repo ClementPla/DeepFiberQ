@@ -8,6 +8,12 @@ readme = "README.md"
 [tool.poetry.scripts]
 DNAI = "dnafiber.start:main"
 
+[project.script]
+DNAI = "dnafiber.start:main"
+
+[tools.setuptools]
+packages = ["dnafiber"]
+
 [tool.setuptools_scm]
 write_to="dnafiber/_version_.py"
 version_scheme="guess-next-dev"

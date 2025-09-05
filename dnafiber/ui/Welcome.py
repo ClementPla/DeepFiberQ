@@ -18,7 +18,7 @@ def main():
     )
     st.write("## Features")
     st.write(
-        "- **Image loading**: The application accepts CZI file, jpeg and PNG file. \n"
+        "- **Image loading**: The application accepts CZI, Tiff, DV, jpeg and PNG file. \n"
         "- **Image segmentation**: The application provides a set of tools to segment the DNA fiber and measure the ratio between analogs. \n"
     )
     st.write("## Technical details")
@@ -27,7 +27,7 @@ def main():
         st.write("### Source")
         st.write("The source code for this application is available on GitHub.")
         """
-        [![Repo](https://badgen.net/badge/icon/GitHub?icon=github&label)](https://github.com/ClementPla/DeepFiberQ/tree/relabelled) 
+        [![Repo](https://badgen.net/badge/icon/GitHub?icon=github&label)](https://github.com/ClementPla/DeepFiberQ/) 
 
         """
         st.markdown("<br>", unsafe_allow_html=True)

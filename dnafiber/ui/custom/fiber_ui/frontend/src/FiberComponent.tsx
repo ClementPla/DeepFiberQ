@@ -72,6 +72,7 @@ function FiberComponent(
   // Component state
   const [isFocused, setIsFocused] = useState(false)
   const [hideErrors, setHideErrors] = useState(false)
+  const [hideBbox, setHideBbox] = useState(false)
   /**
    * Dynamic styling based on Streamlit theme and component state
    * This demonstrates how to use the Streamlit theme for consistent styling
@@ -165,25 +166,44 @@ function FiberComponent(
               </Switch.Root>
               <span style={{ fontSize: "14px" }}>Hide errors</span>
             </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+              }}
+            >
+              <Switch.Root
+                checked={hideBbox}
+                onCheckedChange={setHideBbox}
+                className={switch_styles.Switch}
+              >
+                <Switch.Thumb className={switch_styles.Thumb} />
+              </Switch.Root>
+              <span style={{ fontSize: "14px" }}>Hide bounding boxes</span>
+            </div>
+            <span className="slider-container">
+              <Slider
+                value={strokeScale}
+                max={10}
+                min={1}
+                step={0.1}
+                persistentThumb
+                onChange={({ value }) => value && setstrokeScaleValue(value)}
+                overrides={{
+                  TickBar: {
+                    style: ({ $theme }) => ({
+                      opacity: 0,
+                    }),
+                  },
+                }}
+              />
+              Stroke width
+            </span>
             <span>
               Found {elements.length} fibers (
               {elements.filter((el: Fiber) => el.is_error).length} with errors)
             </span>
-            <Slider
-              value={strokeScale}
-              max={10}
-              min={1}
-              step={0.1}
-              persistentThumb
-              onChange={({ value }) => value && setstrokeScaleValue(value)}
-              overrides={{
-                TickBar: {
-                  style: ({ $theme }) => ({
-                    opacity: 0,
-                  }),
-                },
-              }}
-            />
           </div>
           <TransformWrapper
             ref={transformRef}
@@ -226,7 +246,7 @@ function FiberComponent(
                         stroke={el.is_error ? "red" : "white"}
                         strokeWidth={default_radius * strokeScale[0]}
                         className={`hover-target ${
-                          showOnlyPolylines ? "hidden" : ""
+                          showOnlyPolylines || hideBbox ? "hidden" : ""
                         }`}
                         rx={default_radius}
                       >
@@ -244,7 +264,7 @@ function FiberComponent(
                             fill="none"
                             stroke={el.colors[line_idx]}
                             strokeWidth={default_radius * strokeScale[0]}
-                            opacity={showOnlyPolylines ? 1.0 : 0.0}
+                            opacity={showOnlyPolylines || hideBbox ? 1.0 : 0.0}
                           />
                         ))}
                       </g>

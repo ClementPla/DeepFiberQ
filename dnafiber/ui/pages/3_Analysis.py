@@ -26,12 +26,12 @@ def image_name_to_category(image_name):
     return "-".join(image_name.split("-")[:-1])
 
 
-def plot_result(seleted_category):
+def plot_result(selected_category):
     if st.session_state.get("results", None) is None or selected_category is None:
         return
     only_bilateral = st.checkbox(
         "Show only bicolor fibers",
-        value=False,
+        value=True,
     )
     remove_outliers = st.checkbox(
         "Remove outliers",
@@ -45,7 +45,7 @@ def plot_result(seleted_category):
 
     show_points = st.checkbox(
         "Show points",
-        value=False,
+        value=True,
         help="Show a swarm plot next to the distribution plot",
     )
     normalize = st.checkbox(

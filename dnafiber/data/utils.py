@@ -52,8 +52,8 @@ def extract_bboxes(mask):
     return bboxes
 
 
-def preprocess(raw_data, reverse_channels=False, bit_depth=14):
-    MAX_VALUE = 2**bit_depth - 1
+def preprocess(raw_data, reverse_channels=False, bit_depth=16):
+    MAX_VALUE = (2**bit_depth) - 1
     if raw_data.ndim == 2:
         raw_data = raw_data[np.newaxis, :, :]
     h, w = raw_data.shape[1:3]

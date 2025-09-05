@@ -2,7 +2,7 @@ import os
 import streamlit.components.v1 as components
 from dnafiber.data.utils import numpy_to_base64_jpeg
 
-_RELEASE = False
+_RELEASE = True
 
 
 if not _RELEASE:

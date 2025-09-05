@@ -77,9 +77,31 @@ def check_version():
     else:
         print("✅ You are on the latest version.")
 
+    return local == remote
+
 
 def main():
-    check_version()
+    valid = check_version()
+    if valid is None:
+        print("Could not verify if the version is up-to-date.")
+    elif not valid:
+        # Suggest to auto-update
+        response = input("Do you want to update now? [y/N]: ")
+        if response.lower() == "y":
+            print("Uninstalling old version...")
+            subprocess.run(["pip", "uninstall", "-y", "dnafiber"])
+            print("Installing latest version...")
+            subprocess.run(
+                [
+                    "pip",
+                    "install",
+                    "--upgrade",
+                    "git+https://github.com/ClementPla/DeepFiberQ.git",
+                ]
+            )
+            # Relaunch the script
+            print("Update done! Relaunch the application.")
+
     # Start the Streamlit application
     print("Starting Streamlit application...")
     local_dir = os.path.dirname(os.path.abspath(__file__))

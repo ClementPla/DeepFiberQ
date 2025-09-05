@@ -3,11 +3,15 @@ import numpy as np
 import streamlit as st
 import torch
 
-from PIL import Image
-import io
-from dnafiber.data.utils import CMAP
 from dnafiber.deployment import MODELS_ZOO, MODELS_ZOO_R, ENSEMBLE, Models
-from dnafiber.ui.components import show_fibers_cacheless, table_components
+from dnafiber.ui.components import (
+    show_fibers,
+    show_fibers_cacheless,
+    table_components,
+    distribution_analysis,
+    viewer_components,
+)
+from dnafiber.ui.custom.fiber_ui import fiber_ui
 from dnafiber.ui.inference import get_model, ui_inference
 from dnafiber.ui.utils import (
     build_file_id,
@@ -16,7 +20,6 @@ from dnafiber.ui.utils import (
     get_multifile_image,
     get_resized_image,
 )
-from dnafiber.ui.custom.fiber_ui import fiber_ui
 from dnafiber.ui import DefaultValues as DV
 from dnafiber.ui.utils import retain_session_state
 
@@ -73,9 +76,6 @@ def clear_cache():
     st.success("Cache cleared!")
 
 
-st.button("Clear cache", on_click=clear_cache)
-
-
 def start_inference(
     image,
     model_name,
@@ -105,55 +105,32 @@ def start_inference(
         prediction_threshold,
         key=inference_id,
     )
-    tab_viewer, tab_fibers = st.tabs(["Viewer", "Fibers"])
+    tab_viewer, tab_fibers, tab_distributions = st.tabs(
+        ["Viewer", "Fibers", "Distribution"]
+    )
 
     with tab_fibers:
-        df = show_fibers_cacheless(
+        df = show_fibers(
             _prediction=prediction,
             _image=image,
+            inference_id=inference_id,
         )
         table_components(df)
 
     with tab_viewer:
-        if image.max() > 25:
-            with st.spinner("Normalizing image..."):
-                image = cv2.normalize(
-                    image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
-                )
-
+        max_dim = max(org_h, org_w)
         max_size = 10000
-        h, w = image.shape[:2]
-        size = max(h, w)
-        scale = 1.0
-        if size > max_size:
+        if max_dim > max_size:
             st.toast(
                 f"Images are displayed at a lower resolution of {max_size} pixel wide"
             )
-            scale = max_size / size
-            with st.spinner("Resizing image..."):
-                image = cv2.resize(
-                    image,
-                    None,
-                    fx=scale,
-                    fy=scale,
-                    interpolation=cv2.INTER_LINEAR,
-                )
+        rescaled_image, scale, jpeg_data = viewer_components(
+            image, prediction, inference_id
+        )
+        fiber_ui(
+            rescaled_image, prediction.valid_copy().svgs(scale=scale), key=inference_id
+        )
 
-        fiber_ui(image, prediction.valid_copy().svgs(scale=scale))
-        with st.spinner("Preparing downloadable results..."):
-            labelmap = prediction.filtered_copy().get_labelmap(org_h, org_w, 3)
-            labelmap = (CMAP(labelmap)[:, :, :3] * 255).astype(np.uint8)
-
-            image = Image.fromarray(labelmap)
-
-            # Create an in-memory binary stream
-            buffer = io.BytesIO()
-
-            # Save the image to the buffer in PNG format
-            image.save(buffer, format="jpeg")
-
-            # Get the byte data from the buffer
-            jpeg_data = buffer.getvalue()
         with st.expander("Download results", expanded=True):
             st.download_button(
                 "Download segmented image",
@@ -161,6 +138,9 @@ def start_inference(
                 file_name="segmented_image.jpg",
                 mime="image/jpeg",
             )
+
+    with tab_distributions:
+        distribution_analysis(prediction)
 
 
 def create_display_files(files):

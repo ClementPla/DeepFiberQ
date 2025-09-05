@@ -1,14 +1,24 @@
 import math
 
 import cv2
+import numpy as np
 import pandas as pd
 import streamlit as st
-
+from dnafiber.data.utils import CMAP
+import plotly.graph_objects as go
 from dnafiber.data.utils import numpy_to_base64_jpeg
+from dnafiber.postprocess.fiber import Fibers
+from dnafiber.ui.custom.fiber_ui import fiber_ui
+from PIL import Image
+import io
+
+import plotly.express as px
 
 
 @st.cache_data
-def show_fibers(_prediction, _image, image_id=None, resolution=400, show_errors=True):
+def show_fibers(
+    _prediction, _image, inference_id=None, resolution=400, show_errors=True
+):
     return show_fibers_cacheless(
         _prediction,
         _image,
@@ -37,7 +47,9 @@ def show_fibers_cacheless(_prediction, _image, resolution=400, show_errors=True)
         green_length = st.session_state["pixel_size"] * g
         data["firstAnalog"].append(f"{red_length:.3f} ")
         data["secondAnalog"].append(f"{green_length:.3f} ")
-        data["ratio"].append(f"{green_length / red_length:.3f}")
+        data["ratio"].append(
+            f"{green_length / red_length if red_length > 0 else 0:.3f}"
+        )
         data["fiber_type"].append(fiber.fiber_type)
         data["is_valid"].append(fiber.is_valid)
 
@@ -162,3 +174,131 @@ def table_components(df):
                 file_name="fibers_segment.csv",
                 mime="text/csv",
             )
+
+
+def distribution_analysis(predictions: Fibers):
+    df = predictions.to_df()
+    df = df[df["Fiber type"] == "double"]
+    df = df[(df.Ratio > 0.125) & (df.Ratio < 8)]
+    df["Length"] = df["First analog (µm)"] + df["Second analog (µm)"]
+    cap = st.checkbox(
+        "Cap number of fibers",
+        value=False,
+        help="If checked, we only keep the N fibers closest to the barycenter of the distribution.",
+    )
+    if cap:
+        N = st.slider(
+            "Number of fibers",
+            min_value=1,
+            max_value=len(df),
+            value=50,
+            step=1,
+        )
+
+    mean_points = (
+        df[["First analog (µm)", "Second analog (µm)", "Length"]].median().values
+    )
+
+    df["Distance"] = np.linalg.norm(
+        df[["First analog (µm)", "Second analog (µm)", "Length"]].values - mean_points,
+        axis=1,
+    )
+
+    col1, col2 = st.columns(2)
+    with col1:
+        fig = px.box(
+            df.nsmallest(N if cap else len(df), "Distance"),
+            y="Ratio",
+            points="all",
+            title="Distribution of the Ratio",
+            labels={"Ratio": "Ratio (second analog / first analog)"},
+        )
+        fig.update_layout(height=500, margin=dict(l=0, r=0, b=0, t=0))
+        st.plotly_chart(fig, use_container_width=True)
+
+    with col2:
+        fig = go.Figure(
+            data=go.Scatter3d(
+                x=df["First analog (µm)"],
+                y=df["Second analog (µm)"],
+                z=df["Length"],
+                mode="markers",
+                marker=dict(size=1, color=df["Distance"]),
+            )
+        )
+        # Draw a radius around the barycenter that contains N points
+        if cap:
+            radius = df.nsmallest(N, "Distance").Distance.max()
+
+            # Create a sphere
+            u = np.linspace(0, 2 * np.pi, 25)
+            v = np.linspace(0, np.pi, 25)
+            x = mean_points[0] + radius * np.outer(np.cos(u), np.sin(v))
+            y = mean_points[1] + radius * np.outer(np.sin(u), np.sin(v))
+            z = mean_points[2] + radius * np.outer(np.ones(np.size(u)), np.cos(v))
+            fig.add_trace(
+                go.Surface(
+                    x=x,
+                    y=y,
+                    z=z,
+                    opacity=0.2,
+                    showscale=False,
+                )
+            )
+
+        fig.add_trace(
+            go.Scatter3d(
+                x=[mean_points[0]],
+                y=[mean_points[1]],
+                z=[mean_points[2]],
+                mode="markers",
+                marker=dict(size=5, color="green"),
+                name="Barycenter",
+            )
+        )
+        # Set axis labels
+        fig.update_layout(
+            scene=dict(
+                xaxis_title="First analog (µm)",
+                yaxis_title="Second analog (µm)",
+                zaxis_title="Length (µm)",
+            ),
+            height=700,
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+
+@st.cache_data(max_entries=5)
+def viewer_components(_image, _prediction, inference_id):
+    image = _image
+    if image.max() > 25:
+        image = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+
+        max_size = 10000
+        h, w = image.shape[:2]
+        size = max(h, w)
+        scale = 1.0
+        if size > max_size:
+            scale = max_size / size
+            image = cv2.resize(
+                image,
+                None,
+                fx=scale,
+                fy=scale,
+                interpolation=cv2.INTER_LINEAR,
+            )
+
+        labelmap = _prediction.filtered_copy().get_labelmap(h, w, 3)
+        labelmap = (CMAP(labelmap)[:, :, :3] * 255).astype(np.uint8)
+
+        labelmap = Image.fromarray(labelmap)
+
+        # Create an in-memory binary stream
+        buffer = io.BytesIO()
+
+        # Save the image to the buffer in PNG format
+        labelmap.save(buffer, format="jpeg")
+
+        # Get the byte data from the buffer
+        jpeg_data = buffer.getvalue()
+        return image, scale, jpeg_data

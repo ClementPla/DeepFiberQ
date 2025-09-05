@@ -16,7 +16,7 @@ authors = [{name="ClementPla", email="clement.playout@polymtl.ca"}]
 readme = "README.md"
 
 
-[project.script]
+[project.scripts]
 DNAI = "dnafiber.start:main"
 
 [tools.setuptools]

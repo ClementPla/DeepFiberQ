@@ -100,7 +100,8 @@ def main():
                 ]
             )
             # Relaunch the script
-            print("Update done! Relaunch the application.")
+            print("Update done! Please restart the application.")
+            return False
 
     # Start the Streamlit application
     print("Starting Streamlit application...")
@@ -115,5 +116,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
-    print("Streamlit application started successfully.")
+    if main():
+        print("Streamlit application started successfully.")

@@ -62,7 +62,7 @@ def get_remote_commit(repo="ClementPla/DeepFiberQ"):
 
 
 def check_version():
-    local = get_local_commit()
+    local = get_local_commit()[:7]
     remote = get_remote_commit()[:7]
     if not local:
         print("⚠️ Could not determine local commit.")

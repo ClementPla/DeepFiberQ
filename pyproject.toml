@@ -1,3 +1,8 @@
+
+[build-system]
+requires = ["setuptools>=42", "setuptools-scm>=8"]
+build-backend = "setuptools.build_meta"
+
 [tool.poetry]
 name = "dnafiber"
 version = "0.2.0"
@@ -8,6 +13,14 @@ readme = "README.md"
 [tool.poetry.scripts]
 DNAI = "dnafiber.start:main"
 
+[tool.setuptools_scm]
+write_to="dnafiber/_version_.py"
+version_scheme="guess-next-dev"
+local_scheme="node-and-date"
+
+[tool.setuptools]
+packages = ["dnafiber"]
+
 [project]
 name = "dnafiber"
 dynamic = ["version"]
@@ -15,21 +28,9 @@ description = ""
 authors = [{name="ClementPla", email="clement.playout@polymtl.ca"}]
 readme = "README.md"
 
-
 [project.scripts]
 DNAI = "dnafiber.start:main"
 
-[tools.setuptools]
-packages = ["dnafiber"]
-
-[tool.setuptools_scm]
-write_to="dnafiber/_version_.py"
-version_scheme="guess-next-dev"
-local_scheme="node-and-date"
-
-[build-system]
-requires = ["setuptools>=42", "setuptools-scm>=8"]
-build-backend = "setuptools.build_meta"
 
 [tool.poetry.dependencies]
 python = "^3.10"

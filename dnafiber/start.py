@@ -68,11 +68,12 @@ def check_version():
         print("⚠️ Could not determine local commit.")
         return
     if local != remote:
+        print(local, remote)
         print(
             f"⚠️ Your install is outdated.\nLocal: {local[:7]} vs Remote: {remote[:7]}"
         )
         print(
-            "👉 Run: pip install --upgrade git+https://github.com/ClementPla/DeepFiberQ.git"
+            "👉 Run: pip install --upgrade git+https://github.com/ClementPla/DeepFiberQ.git or auto-update"
         )
     else:
         print("✅ You are on the latest version.")
@@ -83,7 +84,7 @@ def check_version():
 def main():
     valid = check_version()
     if valid is None:
-        print("Could not verify if the version is up-to-date.")
+        pass
     elif not valid:
         # Suggest to auto-update
         response = input("Do you want to update now? [y/N]: ")

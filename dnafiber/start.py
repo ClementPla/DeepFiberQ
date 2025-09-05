@@ -63,12 +63,11 @@ def get_remote_commit(repo="ClementPla/DeepFiberQ"):
 
 def check_version():
     local = get_local_commit()
-    remote = get_remote_commit()
+    remote = get_remote_commit()[:7]
     if not local:
         print("⚠️ Could not determine local commit.")
         return
     if local != remote:
-        print(local, remote)
         print(
             f"⚠️ Your install is outdated.\nLocal: {local[:7]} vs Remote: {remote[:7]}"
         )

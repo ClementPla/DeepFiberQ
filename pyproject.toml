@@ -8,6 +8,14 @@ readme = "README.md"
 [tool.poetry.scripts]
 DNAI = "dnafiber.start:main"
 
+[project]
+name = "dnafiber"
+version = ["version"]
+description = ""
+authors = [{name="ClementPla", email="clement.playout@polymtl.ca"}]
+readme = "README.md"
+
+
 [project.script]
 DNAI = "dnafiber.start:main"
 

@@ -121,7 +121,7 @@ class FiberProps:
     @property
     def is_valid(self):
         try:
-            fiber_type = self.fiber_type
+            _ = self.fiber_type
         except IndexError:
             # Happens if there is no pixel remaining for this fiber, which indicates it is invalid.
             return False
@@ -307,6 +307,18 @@ class Fibers:
     def svgs(self, scale=1.0):
         svgs = [fiber.svg_representation(scale) for fiber in self.fibers]
         return [svg for svg in svgs if svg is not None]
+
+    def debug(self, h=1024, w=1024):
+        import matplotlib.pyplot as plt
+        from dnafiber.data.utils import CMAP
+
+        labelmap = self.get_labelmap(h, w)
+
+        ratio = np.mean(self.ratios)
+        plt.imshow(labelmap, cmap=CMAP)
+        plt.title(f"Fiber Labelmap, {len(self.fibers)} fibers, mean ratio: {ratio:.2f}")
+        plt.axis("off")
+        plt.show()
 
 
 def estimate_fiber_category(fiber_trace: np.ndarray, fiber_data: np.ndarray) -> str:

@@ -64,7 +64,7 @@ def preprocess(raw_data, reverse_channels=False, bit_depth=16):
         hist, bins = np.histogram(chan.ravel(), MAX_VALUE + 1, (0, MAX_VALUE + 1))
         cdf = hist.cumsum()
         cdf_normalized = cdf / cdf[-1]
-        bmax = np.searchsorted(cdf_normalized, 0.99, side="left")
+        bmax = np.searchsorted(cdf_normalized, 0.999, side="left")
         clip = np.clip(chan, 0, bmax).astype(np.float32)
         clip = (clip - clip.min()) / (bmax - clip.min()) * 255
         result[:, :, orders[i]] = clip

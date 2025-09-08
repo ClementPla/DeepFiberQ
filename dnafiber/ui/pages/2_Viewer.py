@@ -109,14 +109,6 @@ def start_inference(
         ["Viewer", "Fibers", "Distribution"]
     )
 
-    with tab_fibers:
-        df = show_fibers(
-            _prediction=prediction,
-            _image=image,
-            inference_id=inference_id,
-        )
-        table_components(df)
-
     with tab_viewer:
         max_dim = max(org_h, org_w)
         max_size = 10000
@@ -127,7 +119,7 @@ def start_inference(
         rescaled_image, scale, jpeg_data = viewer_components(
             image, prediction, inference_id
         )
-        fiber_ui(
+        selected_fibers = fiber_ui(
             rescaled_image, prediction.valid_copy().svgs(scale=scale), key=inference_id
         )
 
@@ -138,6 +130,24 @@ def start_inference(
                 file_name="segmented_image.jpg",
                 mime="image/jpeg",
             )
+
+    for fiber in prediction:
+        if fiber.fiber_id in selected_fibers:
+            fiber.is_an_error = True
+
+    with tab_fibers:
+        df = show_fibers(
+            _prediction=prediction,
+            _image=image,
+            inference_id=inference_id,
+        )
+        for idx in df.index:
+            if df.at[idx, "Fiber ID"] in selected_fibers:
+                df.at[idx, "is_valid"] = False
+        table_components(df)
+
+        st.write("Fibers removed from the viewer are marked as errors.")
+        st.data_editor(selected_fibers, hide_index=True)
 
     with tab_distributions:
         distribution_analysis(prediction)
@@ -191,6 +201,8 @@ if on_session_start():
             )
         image = get_multifile_image(file)
     else:
+        from dnafiber.ui.utils import get_image_cacheless
+
         image = get_image(
             file,
             reverse_channel=st.session_state.get(

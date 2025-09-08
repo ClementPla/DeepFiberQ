@@ -34,7 +34,7 @@ interface Fiber {
   height: number
   x: number
   y: number
-  fiber_id: string
+  fiber_id: number
   ratio: number
   type: string
   points: string[]
@@ -73,6 +73,7 @@ function FiberComponent(
   const [isFocused, setIsFocused] = useState(false)
   const [hideErrors, setHideErrors] = useState(false)
   const [hideBbox, setHideBbox] = useState(false)
+  const [selectedFibers, setSelectedFibers] = useState<number[]>([])
   /**
    * Dynamic styling based on Streamlit theme and component state
    * This demonstrates how to use the Streamlit theme for consistent styling
@@ -198,12 +199,24 @@ function FiberComponent(
                   },
                 }}
               />
-              Stroke width
             </span>
             <span>
               Found {elements.length} fibers (
               {elements.filter((el: Fiber) => el.is_error).length} with errors)
             </span>
+            <Button
+              onClick={() => {
+                setSelectedFibers([])
+              }}
+            >
+              Clear selection
+            </Button>
+            <Button
+              onClick={() => Streamlit.setComponentValue(selectedFibers)}
+              style={{ marginLeft: "1em" }}
+            >
+              Send selected fibers
+            </Button>
           </div>
           <TransformWrapper
             ref={transformRef}
@@ -249,11 +262,33 @@ function FiberComponent(
                           showOnlyPolylines || hideBbox ? "hidden" : ""
                         }`}
                         rx={default_radius}
+                        onClick={() => {
+                          setSelectedFibers((prev) =>
+                            prev.includes(el.fiber_id)
+                              ? prev.filter((i) => i !== el.fiber_id)
+                              : [...prev, el.fiber_id]
+                          )
+                        }}
                       >
                         <title>
-                          Fiber id: {el.fiber_id}, Ratio: {el.ratio.toFixed(2)}
+                          Fiber id: {el.fiber_id.toFixed(0)}, Ratio:{" "}
+                          {el.ratio.toFixed(2)}
                         </title>
                       </rect>
+
+                      {selectedFibers.includes(el.fiber_id) && (
+                        <rect
+                          x={el.x - margin}
+                          y={el.y - margin}
+                          width={el.width + margin * 2}
+                          height={el.height + margin * 2}
+                          fill="none"
+                          stroke="blue"
+                          strokeWidth={default_radius * strokeScale[0] * 1.5}
+                          rx={default_radius}
+                          pointerEvents="none"
+                        />
+                      )}
 
                       <g className="hover-paths">
                         {el.points.map((line: string, line_idx: number) => (

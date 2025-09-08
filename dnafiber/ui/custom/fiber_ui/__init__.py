@@ -34,6 +34,6 @@ def fiber_ui(image, fibers, key=None):
         image_w=image.shape[1],
         image_h=image.shape[0],
         key=key,
-        default=False,
+        default=[],
     )
     return component_value

@@ -39,8 +39,6 @@ def show_fibers_cacheless(_prediction, _image, resolution=400, show_errors=True)
     )
 
     for fiber in _prediction:
-        if not show_errors and not fiber.is_valid:
-            continue
         data["fiber_id"].append(fiber.fiber_id)
         r, g = fiber.counts
         red_length = st.session_state["pixel_size"] * r
@@ -51,7 +49,7 @@ def show_fibers_cacheless(_prediction, _image, resolution=400, show_errors=True)
             f"{green_length / red_length if red_length > 0 else 0:.3f}"
         )
         data["fiber_type"].append(fiber.fiber_type)
-        data["is_valid"].append(fiber.is_valid)
+        data["is_valid"].append(fiber.is_acceptable)
 
         x, y, w, h = fiber.bbox
 
@@ -148,8 +146,8 @@ def table_components(df):
     )
 
     rows = event["selection"]["rows"]
-    columns = df.columns[:-2]
-    df = df.iloc[rows][columns]
+    columns = df.columns
+    selected_df = df.iloc[rows][columns]
 
     cols = st.columns(3)
     with cols[0]:
@@ -158,22 +156,21 @@ def table_components(df):
             help="Copy the selected fibers to clipboard in CSV format.",
         )
         if copy_to_clipboard:
-            df.to_clipboard(index=False)
+            selected_df.to_clipboard(index=False)
+    with cols[1]:
+        st.download_button(
+            "Download valid fibers",
+            data=df[df["is_valid"]].to_csv(index=False).encode("utf-8"),
+            file_name=f"fibers_valid.csv",
+            mime="text/csv",
+        )
     with cols[2]:
-        if st.session_state.get("image_id", None) is not None:
-            st.download_button(
-                "Download selected fibers",
-                data=df.to_csv(index=False).encode("utf-8"),
-                file_name=f"fibers_{st.session_state.image_id}.csv",
-                mime="text/csv",
-            )
-        else:
-            st.download_button(
-                "Download selected fibers",
-                data=df.to_csv(index=False).encode("utf-8"),
-                file_name="fibers_segment.csv",
-                mime="text/csv",
-            )
+        st.download_button(
+            "Download selected fibers",
+            data=selected_df.to_csv(index=False).encode("utf-8"),
+            file_name="fibers_segment.csv",
+            mime="text/csv",
+        )
 
 
 def distribution_analysis(predictions: Fibers):
@@ -194,8 +191,8 @@ def distribution_analysis(predictions: Fibers):
             value=50,
             step=1,
         )
-    cap_values = ["Ratio"]
-    mean_points = df[cap_values].mean().values
+    cap_values = ["Length"]
+    mean_points = df[cap_values].median().values
 
     df["Distance"] = np.linalg.norm(
         df[cap_values].values - mean_points,

@@ -4,6 +4,8 @@ from typing import Optional, Tuple
 from dnafiber.postprocess.skan import trace_skeleton
 from skimage.segmentation import expand_labels
 from dnafiber.postprocess.utils import generate_svg
+import pickle
+import cv2
 
 
 @attrs.define
@@ -219,13 +221,43 @@ class Fibers:
     def get_labelmap(self, h, w, fiber_width=1):
         labelmap = np.zeros((h, w), dtype=np.uint8)
         for fiber in self.fibers:
-            x, y, w, h = fiber.bbox
-            roi = labelmap[y : y + h, x : x + w]
-            binary = fiber.data > 0
-            roi[binary] = fiber.data[binary]
+            try:
+                x, y, w, h = fiber.bbox
 
-        labelmap = expand_labels(labelmap, fiber_width)
+                roi = labelmap[y : y + h, x : x + w]
+                binary = fiber.data > 0
+                roi[binary] = fiber.data[binary]
+            except IndexError as e:
+                print(f"Error processing fiber {fiber.fiber_id}: {e}")
+        if fiber_width > 1:
+            labelmap = expand_labels(labelmap, fiber_width)
         return labelmap
+
+    def get_bounding_boxes_map(self, h, w, width=1, image=None):
+        if image is None:
+            bbox_map = np.zeros((h, w), dtype=np.uint8)
+        else:
+            bbox_map = image.copy()
+        for i, fiber in enumerate(self.fibers, start=1):
+            try:
+                x, y, bw, bh = fiber.bbox
+
+                # Draw a square around the bbox
+                x1 = max(0, x - width)
+                y1 = max(0, y - width)
+                x2 = min(bbox_map.shape[1], x + bw + width)
+                y2 = min(bbox_map.shape[0], y + bh + width)
+
+                cv2.rectangle(
+                    bbox_map,
+                    (x1, y1),
+                    (x2, y2),
+                    (255, 255, 255),
+                    thickness=width,
+                )
+            except IndexError as e:
+                print(f"Error processing fiber {fiber.fiber_id}: {e}")
+        return bbox_map
 
     def contains(self, fiber: FiberProps, ratio=0.5):
         for existing_fiber in self.fibers:
@@ -250,6 +282,9 @@ class Fibers:
         return Fibers(
             [fiber for fiber in self.fibers if (fiber.is_acceptable and fiber.is_valid)]
         )
+
+    def only_double_copy(self):
+        return Fibers([fiber for fiber in self.fibers if fiber.is_double])
 
     def union(self, other, ratio=0.5):
         union = Fibers(self.fibers)
@@ -319,6 +354,22 @@ class Fibers:
         plt.title(f"Fiber Labelmap, {len(self.fibers)} fibers, mean ratio: {ratio:.2f}")
         plt.axis("off")
         plt.show()
+
+    def get_fiber_by_id(self, fiber_id: int) -> Optional[FiberProps]:
+        for fiber in self.fibers:
+            if fiber.fiber_id == fiber_id:
+                return fiber
+        return None
+
+    def to_pickle(self, path: str):
+        with open(path, "wb") as f:
+            pickle.dump(self, f)
+
+    @staticmethod
+    def from_pickle(path: str) -> "Fibers":
+        with open(path, "rb") as f:
+            fibers = pickle.load(f)
+        return fibers
 
 
 def estimate_fiber_category(fiber_trace: np.ndarray, fiber_data: np.ndarray) -> str:

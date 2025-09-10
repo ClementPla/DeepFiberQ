@@ -4,13 +4,10 @@ import cv2
 import numpy as np
 import pandas as pd
 import streamlit as st
-from dnafiber.data.utils import CMAP
 import plotly.graph_objects as go
 from dnafiber.data.utils import numpy_to_base64_jpeg
 from dnafiber.postprocess.fiber import Fibers
-from dnafiber.ui.custom.fiber_ui import fiber_ui
-from PIL import Image
-import io
+
 
 import plotly.express as px
 
@@ -283,17 +280,4 @@ def viewer_components(_image, _prediction, inference_id):
                 interpolation=cv2.INTER_LINEAR,
             )
 
-        labelmap = _prediction.filtered_copy().get_labelmap(h, w, 3)
-        labelmap = (CMAP(labelmap)[:, :, :3] * 255).astype(np.uint8)
-
-        labelmap = Image.fromarray(labelmap)
-
-        # Create an in-memory binary stream
-        buffer = io.BytesIO()
-
-        # Save the image to the buffer in PNG format
-        labelmap.save(buffer, format="jpeg")
-
-        # Get the byte data from the buffer
-        jpeg_data = buffer.getvalue()
-        return image, scale, jpeg_data
+        return image, scale

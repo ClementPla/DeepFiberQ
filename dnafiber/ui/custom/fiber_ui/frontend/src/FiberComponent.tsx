@@ -113,6 +113,34 @@ function FiberComponent(
     transformRef.current?.resetTransform()
   }
 
+  const zoomToFiber = useCallback(
+    (fiberId: number) => {
+      const fiber = elements.find((el: Fiber) => el.fiber_id === fiberId)
+      if (!fiber || !transformRef.current) return
+
+      // Calculate center of the fiber in SVG coordinates
+      const centerX = fiber.x + fiber.width / 2
+      const centerY = fiber.y + fiber.height / 2
+
+      // Calculate scale so the fiber fits nicely (e.g., fills 50% of the view)
+      const scaleX = width / (fiber.width * 2)
+      const scaleY = width / (fiber.height * 2)
+      const scale = Math.min(scaleX, scaleY, 10) // limit max zoom
+
+      // In react-zoom-pan-pinch, we need to use negative coordinates to center
+      // This moves the viewport so that the fiber is centered
+      console.log(-centerX * scale + width / 2, -centerY * scale + width / 2)
+      transformRef.current.setTransform(
+        -centerX * scale + width / 2,
+        -centerY * scale + width / 2,
+        scale,
+        200,
+        "easeOut"
+      )
+    },
+    [elements, image_w, image_h, width]
+  )
+
   const [strokeScale, setstrokeScaleValue] = React.useState([1])
   const themeMode = theme?.base == "dark" ? LightTheme : DarkTheme
   return (
@@ -123,7 +151,6 @@ function FiberComponent(
             width: "100%",
           }}
           onKeyDown={(e) => {
-            console.log(e.code)
             if (e.code === "KeyT" || e.key === " ") {
               handleToggle()
             }
@@ -203,6 +230,24 @@ function FiberComponent(
             <span>
               Found {elements.length} fibers (
               {elements.filter((el: Fiber) => el.is_error).length} with errors)
+            </span>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+              <label htmlFor="fiber-id-input" style={{ fontSize: "14px" }}>
+                Zoom to fiber ID:
+              </label>
+              <input
+                id="fiber-id-input"
+                type="number"
+                min={0}
+                style={{ width: "5em" }}
+                onChange={(e) => {
+                  const val = Number(e.target.value)
+                  if (!isNaN(val)) {
+                    zoomToFiber(val)
+                  }
+                }}
+                disabled={disabled}
+              />
             </span>
             <Button
               onClick={() => {

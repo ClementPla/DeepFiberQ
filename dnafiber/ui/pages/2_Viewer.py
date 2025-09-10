@@ -2,11 +2,13 @@ import cv2
 import numpy as np
 import streamlit as st
 import torch
+from dnafiber.data.utils import CMAP
+from PIL import Image
+import io
 
 from dnafiber.deployment import MODELS_ZOO, MODELS_ZOO_R, ENSEMBLE, Models
 from dnafiber.ui.components import (
     show_fibers,
-    show_fibers_cacheless,
     table_components,
     distribution_analysis,
     viewer_components,
@@ -105,6 +107,7 @@ def start_inference(
         prediction_threshold,
         key=inference_id,
     )
+
     tab_viewer, tab_fibers, tab_distributions = st.tabs(
         ["Viewer", "Fibers", "Distribution"]
     )
@@ -116,21 +119,10 @@ def start_inference(
             st.toast(
                 f"Images are displayed at a lower resolution of {max_size} pixel wide"
             )
-        rescaled_image, scale, jpeg_data = viewer_components(
-            image, prediction, inference_id
-        )
+        rescaled_image, scale = viewer_components(image, prediction, inference_id)
         selected_fibers = fiber_ui(
             rescaled_image, prediction.valid_copy().svgs(scale=scale), key=inference_id
         )
-
-        with st.expander("Download results", expanded=True):
-            st.download_button(
-                "Download segmented image",
-                data=jpeg_data,
-                file_name="segmented_image.jpg",
-                mime="image/jpeg",
-            )
-
     for fiber in prediction:
         if fiber.fiber_id in selected_fibers:
             fiber.is_an_error = True
@@ -151,6 +143,53 @@ def start_inference(
 
     with tab_distributions:
         distribution_analysis(prediction)
+
+    with st.sidebar:
+        with st.expander("Download results", expanded=False):
+            width = st.slider(
+                "Set fiber width for visualization",
+                min_value=1,
+                max_value=50,
+                value=3,
+                step=1,
+            )
+
+            prepare_download = st.button(
+                "Prepare download", help="Prepare all results for download."
+            )
+            if prepare_download:
+                labelmap = prediction.filtered_copy().get_labelmap(org_h, org_w, width)
+                labelmap = (CMAP(labelmap)[:, :, :3] * 255).astype(np.uint8)
+                labelmap = Image.fromarray(labelmap)
+
+                # Create an in-memory binary stream
+                buffer = io.BytesIO()
+
+                # Save the image to the buffer in PNG format
+                labelmap.save(buffer, format="jpeg")
+
+                # Get the byte data from the buffer
+                jpeg_data = buffer.getvalue()
+                st.download_button(
+                    "Segmentation map",
+                    data=jpeg_data,
+                    file_name="segmentation_map.jpg",
+                    mime="image/jpeg",
+                )
+
+                bbox_map = prediction.filtered_copy().get_bounding_boxes_map(
+                    org_h, org_w, width=width, image=image
+                )
+                bbox_map = Image.fromarray(bbox_map)
+                buffer = io.BytesIO()
+                bbox_map.save(buffer, format="jpeg")
+                jpeg_data = buffer.getvalue()
+                st.download_button(
+                    "Bounding boxes map",
+                    data=jpeg_data,
+                    file_name="bounding_boxes_map.jpg",
+                    mime="image/jpeg",
+                )
 
 
 def create_display_files(files):
@@ -201,8 +240,6 @@ if on_session_start():
             )
         image = get_multifile_image(file)
     else:
-        from dnafiber.ui.utils import get_image_cacheless
-
         image = get_image(
             file,
             reverse_channel=st.session_state.get(

@@ -61,7 +61,7 @@ def run_one_file(
     start = time.time()
     correction_model = load_model() if use_correction else None
 
-    y_size, x_size = 8192, 8192
+    y_size, x_size = 2048, 2048
     if h > y_size or w > x_size:
         # Extract blocks from the prediction
 

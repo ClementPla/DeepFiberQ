@@ -23,6 +23,8 @@ import {
   TransformWrapper,
   TransformComponent,
   ReactZoomPanPinchRef,
+  ReactZoomPanPinchProps,
+  ReactZoomPanPinchState,
 } from "react-zoom-pan-pinch"
 import { Button } from "baseui/button"
 import { Switch } from "@base-ui-components/react/switch"
@@ -118,25 +120,9 @@ function FiberComponent(
       const fiber = elements.find((el: Fiber) => el.fiber_id === fiberId)
       if (!fiber || !transformRef.current) return
 
-      // Calculate center of the fiber in SVG coordinates
-      const centerX = fiber.x + fiber.width / 2
-      const centerY = fiber.y + fiber.height / 2
-
-      // Calculate scale so the fiber fits nicely (e.g., fills 50% of the view)
-      const scaleX = width / (fiber.width * 2)
-      const scaleY = width / (fiber.height * 2)
-      const scale = Math.min(scaleX, scaleY, 10) // limit max zoom
-
-      // In react-zoom-pan-pinch, we need to use negative coordinates to center
-      // This moves the viewport so that the fiber is centered
-      console.log(-centerX * scale + width / 2, -centerY * scale + width / 2)
-      transformRef.current.setTransform(
-        -centerX * scale + width / 2,
-        -centerY * scale + width / 2,
-        scale,
-        200,
-        "easeOut"
-      )
+      // For debug, log the current scale and position
+      console.log("ZoomToFiber called for fiberId:", fiberId)
+      console.log(transformRef.current.instance.transformState)
     },
     [elements, image_w, image_h, width]
   )
@@ -231,24 +217,7 @@ function FiberComponent(
               Found {elements.length} fibers (
               {elements.filter((el: Fiber) => el.is_error).length} with errors)
             </span>
-            <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-              <label htmlFor="fiber-id-input" style={{ fontSize: "14px" }}>
-                Zoom to fiber ID:
-              </label>
-              <input
-                id="fiber-id-input"
-                type="number"
-                min={0}
-                style={{ width: "5em" }}
-                onChange={(e) => {
-                  const val = Number(e.target.value)
-                  if (!isNaN(val)) {
-                    zoomToFiber(val)
-                  }
-                }}
-                disabled={disabled}
-              />
-            </span>
+
             <Button
               onClick={() => {
                 setSelectedFibers([])
@@ -266,7 +235,7 @@ function FiberComponent(
           <TransformWrapper
             ref={transformRef}
             disabled={disabled}
-            minScale={0.5}
+            minScale={1.0}
             maxScale={20}
             wheel={{
               disabled: false,

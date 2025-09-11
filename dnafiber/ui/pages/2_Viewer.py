@@ -158,35 +158,49 @@ def start_inference(
                 "Prepare download", help="Prepare all results for download."
             )
             if prepare_download:
-                labelmap = prediction.filtered_copy().get_labelmap(org_h, org_w, width)
-                labelmap = (CMAP(labelmap)[:, :, :3] * 255).astype(np.uint8)
-                labelmap = Image.fromarray(labelmap)
+                with st.spinner("Preparing files..."):
+                    import time
 
-                # Create an in-memory binary stream
-                buffer = io.BytesIO()
+                    start = time.time()
+                    labelmap = prediction.filtered_copy().get_labelmap(
+                        org_h, org_w, width
+                    )
+                    labelmap = CMAP(labelmap, bytes=True)[:, :, :3]
+                    labelmap = Image.fromarray(labelmap)
 
-                # Save the image to the buffer in PNG format
-                labelmap.save(buffer, format="jpeg")
+                    # Create an in-memory binary stream
+                    buffer = io.BytesIO()
 
-                # Get the byte data from the buffer
-                jpeg_data = buffer.getvalue()
+                    # Save the image to the buffer in PNG format
+                    labelmap.save(buffer, format="jpeg")
+
+                    # Get the byte data from the buffer
+                    labelmap_jpeg_data = buffer.getvalue()
+
+                    st.success(
+                        f"Segmentation map is ready! ({time.time() - start:.2f}s)"
+                    )
+                    start = time.time()
+                    bbox_map = prediction.filtered_copy().get_bounding_boxes_map(
+                        org_h, org_w, width=width, image=image
+                    )
+                    bbox_map = Image.fromarray(bbox_map)
+                    buffer = io.BytesIO()
+                    bbox_map.save(buffer, format="jpeg")
+                    bbox_jpeg_data = buffer.getvalue()
+                    st.success(
+                        f"Bounding boxes map is ready! ({time.time() - start:.2f}s)"
+                    )
                 st.download_button(
                     "Segmentation map",
-                    data=jpeg_data,
+                    data=labelmap_jpeg_data,
                     file_name="segmentation_map.jpg",
                     mime="image/jpeg",
                 )
 
-                bbox_map = prediction.filtered_copy().get_bounding_boxes_map(
-                    org_h, org_w, width=width, image=image
-                )
-                bbox_map = Image.fromarray(bbox_map)
-                buffer = io.BytesIO()
-                bbox_map.save(buffer, format="jpeg")
-                jpeg_data = buffer.getvalue()
                 st.download_button(
                     "Bounding boxes map",
-                    data=jpeg_data,
+                    data=bbox_jpeg_data,
                     file_name="bounding_boxes_map.jpg",
                     mime="image/jpeg",
                 )

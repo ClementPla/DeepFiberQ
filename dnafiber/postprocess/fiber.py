@@ -221,16 +221,21 @@ class Fibers:
     def get_labelmap(self, h, w, fiber_width=1):
         labelmap = np.zeros((h, w), dtype=np.uint8)
         for fiber in self.fibers:
-            try:
-                x, y, w, h = fiber.bbox
+            x, y, fw, fh = fiber.bbox
+            # Clip coordinates to image boundaries
+            x0, y0 = max(0, x), max(0, y)
+            x1, y1 = min(w, x + fw), min(h, y + fh)
 
-                roi = labelmap[y : y + h, x : x + w]
-                binary = fiber.data > 0
-                roi[binary] = fiber.data[binary]
-            except IndexError as e:
-                print(f"Error processing fiber {fiber.fiber_id}: {e}")
-        if fiber_width > 1:
-            labelmap = expand_labels(labelmap, fiber_width)
+            if x0 >= x1 or y0 >= y1:
+                continue  # fiber bbox completely outside
+
+            roi = labelmap[y0:y1, x0:x1]
+            fiber_data = fiber.data[: y1 - y0, : x1 - x0]
+            if fiber_width > 1:
+                fiber_data = expand_labels(fiber_data, fiber_width)
+            binary = fiber_data > 0
+            roi[binary] = fiber_data[binary]
+
         return labelmap
 
     def get_bounding_boxes_map(self, h, w, width=1, image=None):

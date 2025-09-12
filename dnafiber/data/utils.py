@@ -59,18 +59,28 @@ def preprocess(raw_data, reverse_channels=False, bit_depth=16):
     h, w = raw_data.shape[1:3]
     orders = np.arange(raw_data.shape[0])[::-1]  # Reverse channel order by default
     result = np.zeros((h, w, 3), dtype=np.uint8)
-
+    clahe = cv2.createCLAHE(clipLimit=0.5, tileGridSize=(64, 64))
     for i, chan in enumerate(raw_data):
         hist, bins = np.histogram(chan.ravel(), MAX_VALUE + 1, (0, MAX_VALUE + 1))
         cdf = hist.cumsum()
         cdf_normalized = cdf / cdf[-1]
-        bmax = np.searchsorted(cdf_normalized, 0.999, side="left")
+        bmax = np.searchsorted(cdf_normalized, 0.99, side="left")
         clip = np.clip(chan, 0, bmax).astype(np.float32)
         clip = (clip - clip.min()) / (bmax - clip.min()) * 255
+        
+        clip = clip.astype(np.uint8)
+        clip = clahe.apply(clip)
+
         result[:, :, orders[i]] = clip
+        
     if reverse_channels:
         # Reverse channels 0 and 1
         result = result[:, :, [1, 0, 2]]
+    
+    result = cv2.bilateralFilter(result, 5, 50, 50)
+
+
+
     return result
 
 

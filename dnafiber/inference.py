@@ -97,8 +97,6 @@ class Inferer(nn.Module):
         if use_tta:
             transforms = tta.Compose(
                 [
-                    tta.HorizontalFlip(),
-                    tta.VerticalFlip(),
                     tta.Rotate90(angles=[0, 90, 180]),
                 ]
             )
@@ -134,9 +132,9 @@ def infer(
     device = torch.device(device)
     sliding_window = None
 
-    if int(h * scale) > 1024 or int(w * scale) > 1024:
+    if int(h * scale) > 512 or int(w * scale) > 512:
         sliding_window = SlidingWindowInferer(
-            roi_size=(1024, 1024),
+            roi_size=(512, 512),
             sw_batch_size=4,
             overlap=0.25,
             mode="gaussian",

@@ -97,7 +97,8 @@ def main():
                     "pip",
                     "install",
                     "--upgrade",
-                    "--force-reinstall --no-cache-dir"
+                    "--force-reinstall",
+                    "--no-cache-dir",
                     "git+https://github.com/ClementPla/DeepFiberQ.git",
                 ]
             )

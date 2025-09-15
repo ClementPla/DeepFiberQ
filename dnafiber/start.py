@@ -46,9 +46,8 @@ def get_local_commit(package_name="dnafiber"):
                 .strip()
             )
             return commit
-
     except Exception as e:
-        print(f"Could not determine local commit: {e}")
+        print(f"Could not determine local commit.")
 
     return None
 

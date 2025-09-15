@@ -75,7 +75,7 @@ def preprocess(raw_data, reverse_channels=False, bit_depth=16):
         # Reverse channels 0 and 1
         result = result[:, :, [1, 0, 2]]
 
-    result = cv2.bilateralFilter(result, 11, 50, 50)
+    result = cv2.bilateralFilter(result, 5, 50, 50)
 
     return result
 

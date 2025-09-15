@@ -107,6 +107,7 @@ def start_inference(
         prediction_threshold,
         key=inference_id,
     )
+    prediction = prediction.valid_copy()
 
     tab_viewer, tab_fibers, tab_distributions = st.tabs(
         ["Viewer", "Fibers", "Distribution"]
@@ -135,11 +136,11 @@ def start_inference(
         )
         for idx in df.index:
             if df.at[idx, "Fiber ID"] in selected_fibers:
-                df.at[idx, "is_valid"] = False
+                df.at[idx, "is_valid"] = ~df.at[idx, "is_valid"]
         table_components(df)
-
-        st.write("Fibers removed from the viewer are marked as errors.")
-        st.data_editor(selected_fibers, hide_index=True)
+        st.write(
+            f"Column is_valid of the selected fibers (ids: {', '.join(map(str, selected_fibers))}) were manually switched."
+        )
 
     with tab_distributions:
         distribution_analysis(prediction)

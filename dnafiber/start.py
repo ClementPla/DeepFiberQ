@@ -81,21 +81,24 @@ def check_version():
 
 
 def main():
-    valid = check_version()
+    try:
+        valid = check_version()
+    except Exception as e:
+        print(f"Could not check for updates: {e}")
+        valid = None
     if valid is None:
         pass
     elif not valid:
         # Suggest to auto-update
         response = input("Do you want to update now? [y/N]: ")
         if response.lower() == "y":
-            print("Uninstalling old version...")
-            subprocess.run(["pip", "uninstall", "-y", "dnafiber"])
             print("Installing latest version...")
             subprocess.run(
                 [
                     "pip",
                     "install",
                     "--upgrade",
+                    "--force-reinstall --no-cache-dir"
                     "git+https://github.com/ClementPla/DeepFiberQ.git",
                 ]
             )

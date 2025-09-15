@@ -64,7 +64,7 @@ def check_version():
     local = get_local_commit()[:7]
     remote = get_remote_commit()[:7]
     if not local:
-        print("⚠️ Could not determine local commit.")
+        print("⚠️ Could not determine local commit. Proceeding without update check.")
         return
     if local != remote:
         print(

@@ -35,7 +35,7 @@ st.markdown(
     """
         <style>
                .block-container {
-                    padding-top: 3rem;
+                    padding-top: 1rem;
                     padding-bottom: 0rem;
                     padding-left: 5rem;
                     padding-right: 5rem;
@@ -265,15 +265,27 @@ if on_session_start():
         )
 
     with st.sidebar:
-        st.metric(
+        st.slider(
             "Pixel size (µm)",
-            st.session_state.get("pixel_size", DV.PIXEL_SIZE),
+            min_value=0.01,
+            max_value=1.0,
+            step=0.01,
+            key="pixel_size",
+            help="Pixel size in micrometers",
         )
-        st.metric(
+        st.slider(
             "Bit depth",
-            st.session_state.get("bit_depth", DV.BIT_DEPTH),
+            key="bit_depth",
+            min_value=8,
+            max_value=16,
+            step=1,
+            help="Bit depth of the image",
         )
-
+        st.checkbox(
+            "Reverse channels",
+            key="reverse_channels",
+            help="If the red and green channels are reversed in the image, check this box.",
+        )
     thumbnail = get_resized_image(image, file_id)
 
     with st.sidebar:

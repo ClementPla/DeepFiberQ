@@ -243,9 +243,26 @@ if st.session_state.get("files_uploaded", None):
     run_segmentation = st.button("Run Segmentation", use_container_width=True)
 
     with st.sidebar:
-        st.metric(
+        st.slider(
             "Pixel size (µm)",
-            st.session_state.get("pixel_size", DV.PIXEL_SIZE),
+            min_value=0.01,
+            max_value=1.0,
+            step=0.01,
+            key="pixel_size",
+            help="Pixel size in micrometers",
+        )
+        st.slider(
+            "Bit depth",
+            key="bit_depth",
+            min_value=8,
+            max_value=16,
+            step=1,
+            help="Bit depth of the image",
+        )
+        st.checkbox(
+            "Reverse channels",
+            key="reverse_channels",
+            help="If the red and green channels are reversed in the image, check this box.",
         )
 
         with st.expander("Model", expanded=True):

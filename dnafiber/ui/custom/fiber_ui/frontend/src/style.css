@@ -18,7 +18,12 @@
     display: inline;
 }
 
-.rect-group:hover .hover-paths .fibers {
+.fibers {
+    stroke-linecap: round;
+    opacity: 1.0;
+}
+
+.rect-group:hover .hover-paths .fibers-animated {
     opacity: 1.0;
     stroke-dasharray: 10, 20;
     stroke-dashoffset: 60;
@@ -26,6 +31,8 @@
     animation-direction: normal;
     animation-timing-function: linear;
 }
+
+.fibers-animated {}
 
 @keyframes dash {
     to {
@@ -48,10 +55,7 @@
 
 }
 
-.fibers {
-    stroke-linecap: round;
 
-}
 
 .hidden {
     opacity: 0;

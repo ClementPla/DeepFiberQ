@@ -75,7 +75,9 @@ function FiberComponent(
   const [isFocused, setIsFocused] = useState(false)
   const [hideErrors, setHideErrors] = useState(false)
   const [hideBbox, setHideBbox] = useState(false)
+  const [animated, setAnimated] = useState(false)
   const [selectedFibers, setSelectedFibers] = useState<number[]>([])
+
   /**
    * Dynamic styling based on Streamlit theme and component state
    * This demonstrates how to use the Streamlit theme for consistent styling
@@ -194,13 +196,29 @@ function FiberComponent(
               >
                 <Switch.Thumb className={switch_styles.Thumb} />
               </Switch.Root>
-              <span style={{ fontSize: "14px" }}>Hide bounding boxes</span>
+              <span style={{ fontSize: "14px" }}>Hide BBoxes</span>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+              }}
+            >
+              <Switch.Root
+                checked={animated}
+                onCheckedChange={setAnimated}
+                className={switch_styles.Switch}
+              >
+                <Switch.Thumb className={switch_styles.Thumb} />
+              </Switch.Root>
+              <span style={{ fontSize: "14px" }}>Animated strokes</span>
             </div>
             <span className="slider-container">
               <Slider
                 value={strokeScale}
-                max={10}
-                min={1}
+                max={5}
+                min={0.1}
                 step={0.1}
                 persistentThumb
                 onChange={({ value }) => value && setstrokeScaleValue(value)}
@@ -307,7 +325,7 @@ function FiberComponent(
                       <g className="hover-paths">
                         {el.points.map((line: string, line_idx: number) => (
                           <polyline
-                            className="fibers"
+                            className={animated ? "fibers-animated" : "fibers"}
                             key={`${line_idx}_${idx}`}
                             points={line}
                             fill="none"

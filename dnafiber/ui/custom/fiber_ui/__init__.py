@@ -1,6 +1,6 @@
 import os
 import streamlit.components.v1 as components
-from dnafiber.data.utils import numpy_to_base64_jpeg
+from dnafiber.data.utils import numpy_to_base64_png
 
 _RELEASE = True
 
@@ -27,7 +27,7 @@ def fiber_ui(image, fibers, key=None):
 
     """
 
-    data_uri = numpy_to_base64_jpeg(image)
+    data_uri = numpy_to_base64_png(image)
     component_value = _component_func(
         image=data_uri,
         elements=fibers,

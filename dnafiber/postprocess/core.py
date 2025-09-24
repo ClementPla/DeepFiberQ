@@ -17,7 +17,7 @@ from dnafiber.postprocess.error_detection import correct_fibers
 cmlabel = ListedColormap(["black", "red", "green"])
 
 MIN_ANGLE = 20
-MIN_BRANCH_LENGTH = 10
+MIN_BRANCH_LENGTH = 5
 MIN_BRANCH_DISTANCE = 30
 
 
@@ -262,7 +262,7 @@ def extract_fibers(
                 width=coordinate[2],
                 height=coordinate[3],
             )
-            fiberprops.append(FiberProps(bbox=bbox, data=fiber, fiber_id=i))
+            fiberprops.append(FiberProps(bbox=bbox, data=fiber))
 
     for fiber in fiberprops:
         fiber.bbox.x += x_offset
@@ -296,4 +296,7 @@ def refine_segmentation(
         )
 
     fibers = Fibers(fibers=fibers)
+    # We set an id to each fiber
+    for i, fiber in enumerate(fibers.fibers):
+        fiber.fiber_id = i + 1
     return fibers

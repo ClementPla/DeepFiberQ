@@ -107,7 +107,7 @@ def convert_rgb_to_mask(image, threshold=200):
     return output
 
 
-def numpy_to_base64_jpeg(image_array):
+def numpy_to_base64_png(image_array):
     """
     Encodes a NumPy image array to a base64 string (PNG format).
 
@@ -124,15 +124,15 @@ def numpy_to_base64_jpeg(image_array):
     buffer = io.BytesIO()
 
     # Save the image to the buffer in PNG format
-    image.save(buffer, format="jpeg")
+    image.save(buffer, format="png")
 
     # Get the byte data from the buffer
-    jpeg_data = buffer.getvalue()
+    png_data = buffer.getvalue()
 
     # Encode the byte data to base64
-    base64_encoded = base64.b64encode(jpeg_data).decode()
+    base64_encoded = base64.b64encode(png_data).decode()
 
-    return f"data:image/jpeg;base64,{base64_encoded}"
+    return f"data:image/png;base64,{base64_encoded}"
 
 
 @st.cache_data

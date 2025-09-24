@@ -11,7 +11,7 @@ from dnafiber.postprocess import refine_segmentation
 
 from dnafiber.postprocess.fiber import FiberProps, Fibers
 from dnafiber.ui.inference import ui_inference_cacheless
-from dnafiber.data.utils import numpy_to_base64_jpeg
+from dnafiber.data.utils import numpy_to_base64_png
 from dnafiber.ui.utils import get_image_cacheless, get_multifile_image, _get_model
 from dnafiber.postprocess.error_detection import load_model
 import numpy as np
@@ -225,9 +225,9 @@ def format_results_to_dataframe(
     )
     if include_thumbnails:
         df["Visualization"] = df["Visualization"].apply(
-            lambda x: numpy_to_base64_jpeg(x)
+            lambda x: numpy_to_base64_png(x)
         )
-        df["Segmentation"] = df["Segmentation"].apply(lambda x: numpy_to_base64_jpeg(x))
+        df["Segmentation"] = df["Segmentation"].apply(lambda x: numpy_to_base64_png(x))
     return df
 
 
@@ -263,7 +263,7 @@ MODELS_ZOO = {
 MODELS_ZOO_R = {v: k for k, v in MODELS_ZOO.items()}
 
 ENSEMBLE = [
-    Models.UNET_MOBILEONE_S0,
+    # Models.UNET_MOBILEONE_S0,
     Models.UNET_SE_RESNET101,
     Models.SEGFORMER_MIT_B2,
     Models.SEGFORMER_MIT_B4,

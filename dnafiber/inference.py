@@ -66,15 +66,29 @@ class BridgeGap(nn.Module):
         pos_prob = 1 - probabilities[:, :1, :, :]
 
         # Morphological closing to bridge small gaps
-        pos_prob = K.morphology.closing(
-            (pos_prob > self.predictive_threshold).float(),
-            self.kernel,
-            engine="convolution",
+        pos_prob = K.morphology.dilation(
+            (pos_prob).float(), self.kernel, engine="convolution"
         )
-
-        probabilities[:, :1][pos_prob > 0] = 0
-        probabilities[:, :1][pos_prob == 0] = 1
+        pos_prob = pos_prob > self.predictive_threshold
+        probabilities[:, :1] = ~pos_prob
         return probabilities
+
+
+class EnsembleModel(nn.Module):
+    def __init__(self, models, weights=None):
+        super().__init__()
+        self.models = nn.ModuleList(models)
+        if weights is None:
+            weights = [1.0 / len(models)] * len(models)
+        self.weights = weights
+        self.softmax = nn.Softmax(dim=1)
+
+    def forward(self, x):
+        outputs = [self.softmax(model(x)) for model in self.models]
+        weighted_outputs = [
+            output * weight for output, weight in zip(outputs, self.weights)
+        ]
+        return torch.stack(weighted_outputs).sum(dim=0)
 
 
 class Inferer(nn.Module):
@@ -88,7 +102,11 @@ class Inferer(nn.Module):
         super().__init__()
 
         self.model = AutoPad(
-            nn.Sequential(model, nn.Softmax(dim=1), BridgeGap(prediction_threshold)), 32
+            nn.Sequential(
+                EnsembleModel(models=model),
+                BridgeGap(prediction_threshold),
+            ),
+            32,
         )
         self.model.eval()
 
@@ -97,7 +115,8 @@ class Inferer(nn.Module):
         if use_tta:
             transforms = tta.Compose(
                 [
-                    tta.Rotate90(angles=[0, 90, 180]),
+                    tta.Rotate90(angles=[0, 90]),
+                    tta.Scale(scales=[1, 0.75, 1.25]),
                 ]
             )
             self.model = tta.SegmentationTTAWrapper(
@@ -132,9 +151,9 @@ def infer(
     device = torch.device(device)
     sliding_window = None
 
-    if int(h * scale) > 512 or int(w * scale) > 512:
+    if int(h * scale) > 1024 or int(w * scale) > 1024:
         sliding_window = SlidingWindowInferer(
-            roi_size=(512, 512),
+            roi_size=(1024, 1024),
             sw_batch_size=4,
             overlap=0.25,
             mode="gaussian",

@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
-from dnafiber.data.utils import numpy_to_base64_jpeg
+from dnafiber.data.utils import numpy_to_base64_png
 from dnafiber.postprocess.fiber import Fibers
 
 
@@ -124,7 +124,7 @@ def show_fibers_cacheless(_prediction, _image, resolution=400, show_errors=True)
             "visualization": "Visualization",
         }
     )
-    df["Visualization"] = df["Visualization"].apply(lambda x: numpy_to_base64_jpeg(x))
+    df["Visualization"] = df["Visualization"].apply(lambda x: numpy_to_base64_png(x))
     return df
 
 
@@ -143,7 +143,7 @@ def table_components(df):
     )
 
     rows = event["selection"]["rows"]
-    columns = df.columns
+    columns = [c for c in df.columns if c != "Visualization"]
     selected_df = df.iloc[rows][columns]
 
     cols = st.columns(3)
@@ -157,7 +157,7 @@ def table_components(df):
     with cols[1]:
         st.download_button(
             "Download valid fibers",
-            data=df[df["is_valid"]].to_csv(index=False).encode("utf-8"),
+            data=df[df["is_valid"]][columns].to_csv(index=False).encode("utf-8"),
             file_name=f"fibers_valid.csv",
             mime="text/csv",
         )

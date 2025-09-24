@@ -59,49 +59,29 @@ def ui_inference_cacheless(
     else:
         correction_model = None
     h, w = _image.shape[:2]
+    model = []
     if isinstance(_model, list):
-        output = None
-        with torch.inference_mode():
-            with st.spinner("Running ensemble inference..."):
-                for model in _model:
-                    if isinstance(model, str):
-                        model = get_model(model)
-                        model.eval()
-                    if output is None:
-                        output = infer(
-                            model,
-                            image=_image,
-                            device=_device,
-                            use_tta=use_tta,
-                            scale=pixel_size,
-                            verbose=verbose,
-                            prediction_threshold=prediction_threshold,
-                        ).cpu()
-                    else:
-                        output += (
-                            infer(
-                                model,
-                                image=_image,
-                                device=_device,
-                                use_tta=use_tta,
-                                scale=pixel_size,
-                                verbose=verbose,
-                                prediction_threshold=prediction_threshold,
-                            )
-                        ).cpu()
-                output = output / len(_model)
-
+        for m in _model:
+            if isinstance(m, str):
+                model.append(get_model(m))
+            else:
+                model.append(m)
     else:
-        with torch.inference_mode():
-            output = infer(
-                _model,
-                image=_image,
-                device=_device,
-                scale=pixel_size,
-                use_tta=use_tta,
-                verbose=verbose,
-                prediction_threshold=prediction_threshold,
-            ).cpu()
+        if isinstance(_model, str):
+            model = [get_model(_model)]
+        else:
+            model = [_model]
+
+    with torch.inference_mode():
+        output = infer(
+            model,
+            image=_image,
+            device=_device,
+            scale=pixel_size,
+            use_tta=use_tta,
+            verbose=verbose,
+            prediction_threshold=prediction_threshold,
+        ).cpu()
 
     with st.spinner("Processing model output..."):
         start = time.time()
